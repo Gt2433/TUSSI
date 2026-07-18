@@ -1,0 +1,1245 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fantex Admin - لوحة تحكم مدير النظام</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  window.firebaseApp = { initializeApp, getAuth, signInWithEmailAndPassword, signOut, onAuthStateChanged, getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot };
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap');
+  * { font-family: 'Cairo', sans-serif; }
+
+  /* Light Mode (Default) */
+  :root {
+    --bg-primary: #f8fafc;
+    --bg-secondary: #ffffff;
+    --bg-card: #ffffff;
+    --bg-input: #f1f5f9;
+    --text-primary: #0f172a;
+    --text-secondary: #475569;
+    --text-muted: #94a3b8;
+    --border-color: #e2e8f0;
+    --accent-color: #a16207;
+    --accent-light: #fef3c7;
+    --danger-color: #dc2626;
+    --success-color: #16a34a;
+    --warning-color: #d97706;
+    --glass-bg: rgba(255,255,255,0.7);
+    --glass-border: rgba(0,0,0,0.08);
+  }
+
+  /* Dark Mode */
+  [data-theme="dark"] {
+    --bg-primary: #0a0a0a;
+    --bg-secondary: #111111;
+    --bg-card: rgba(255,255,255,0.03);
+    --bg-input: rgba(0,0,0,0.5);
+    --text-primary: #ffffff;
+    --text-secondary: #a1a1aa;
+    --text-muted: #71717a;
+    --border-color: rgba(255,255,255,0.08);
+    --accent-color: #eab308;
+    --accent-light: rgba(234,179,8,0.1);
+    --danger-color: #ef4444;
+    --success-color: #22c55e;
+    --warning-color: #f59e0b;
+    --glass-bg: rgba(255,255,255,0.03);
+    --glass-border: rgba(255,255,255,0.08);
+  }
+
+  body { 
+    background: var(--bg-primary); 
+    color: var(--text-primary);
+    transition: background-color 0.3s ease, color 0.3s ease;
+  }
+
+  .glass { 
+    background: var(--glass-bg); 
+    backdrop-filter: blur(20px); 
+    border: 1px solid var(--glass-border); 
+    transition: all 0.3s ease;
+  }
+
+  .glass-gold { 
+    background: var(--accent-light); 
+    backdrop-filter: blur(20px); 
+    border: 1px solid var(--accent-color); 
+    transition: all 0.3s ease;
+  }
+
+  .shiny-btn { 
+    background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); 
+    position: relative; 
+    overflow: hidden; 
+  }
+
+  .shiny-btn::before { 
+    content: ''; 
+    position: absolute; 
+    top: -50%; 
+    left: -50%; 
+    width: 200%; 
+    height: 200%; 
+    background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%); 
+    animation: shine 3s infinite; 
+  }
+
+  @keyframes shine { 
+    0% { transform: translateX(-100%) rotate(45deg); } 
+    100% { transform: translateX(100%) rotate(45deg); } 
+  }
+
+  .gold-btn { 
+    background: linear-gradient(135deg, #713f12 0%, #a16207 50%, #ca8a04 100%); 
+    position: relative; 
+    overflow: hidden; 
+  }
+
+  .gold-btn::before { 
+    content: ''; 
+    position: absolute; 
+    top: -50%; 
+    left: -50%; 
+    width: 200%; 
+    height: 200%; 
+    background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.15) 50%, transparent 70%); 
+    animation: shine 3s infinite; 
+  }
+
+  .fade-in { animation: fadeIn 0.5s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+
+  .slide-up { animation: slideUp 0.4s ease-out; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+
+  .glow-text { text-shadow: 0 0 20px rgba(234,179,8,0.3); }
+
+  .card-hover { 
+    transition: all 0.3s ease; 
+  }
+
+  .card-hover:hover { 
+    transform: translateY(-5px); 
+    box-shadow: 0 20px 40px rgba(0,0,0,0.4); 
+    border-color: var(--accent-color); 
+  }
+
+  input:focus, select:focus, textarea:focus { 
+    outline: none; 
+    box-shadow: 0 0 0 2px rgba(234,179,8,0.3); 
+  }
+
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+
+  /* Custom scrollbar for tables */
+  .custom-scroll::-webkit-scrollbar { width: 6px; height: 6px; }
+  .custom-scroll::-webkit-scrollbar-track { background: transparent; }
+  .custom-scroll::-webkit-scrollbar-thumb { background: var(--border-color); border-radius: 3px; }
+  .custom-scroll::-webkit-scrollbar-thumb:hover { background: var(--text-muted); }
+
+  .theme-transition { transition: all 0.3s ease; }
+</style>
+<base target="_blank">
+<base target="_blank">
+<base target="_blank">
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useContext, createContext } = React;
+
+// ===================== FIREBASE CONFIG =====================
+const firebaseConfig = {
+  apiKey: "AIzaSyD8RQ0oYPrg55pEJPo6ylwG-d7IPjbiru0",
+  authDomain: "fantex.firebaseapp.com",
+  projectId: "fantex",
+  storageBucket: "fantex.firebasestorage.app",
+  messagingSenderId: "368377187521",
+  appId: "1:368377187521:web:279c079cdad3f9f0d5d840"
+};
+
+let app, auth, db;
+let fb = null;
+
+// ===================== THEME CONTEXT =====================
+const ThemeContext = createContext();
+
+function ThemeProvider({ children }) {
+  const [isDark, setIsDark] = useState(() => {
+    const saved = localStorage.getItem('fantex-theme');
+    return saved ? saved === 'dark' : true; // Default to dark
+  });
+
+  useEffect(() => {
+    document.documentElement.setAttribute('data-theme', isDark ? 'dark' : 'light');
+    localStorage.setItem('fantex-theme', isDark ? 'dark' : 'light');
+  }, [isDark]);
+
+  const toggleTheme = () => setIsDark(!isDark);
+
+  return (
+    <ThemeContext.Provider value={{ isDark, toggleTheme }}>
+      {children}
+    </ThemeContext.Provider>
+  );
+}
+
+function useTheme() { return useContext(ThemeContext); }
+
+// ===================== AUTH CONTEXT =====================
+const AuthContext = createContext();
+
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!window.firebaseApp) {
+      setLoading(false);
+      setError("Firebase لم يتم تحميله بعد");
+      return;
+    }
+    fb = window.firebaseApp;
+    app = fb.initializeApp(firebaseConfig);
+    auth = fb.getAuth(app);
+    db = fb.getFirestore(app);
+
+    const unsub = fb.onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u);
+        try {
+          const snap = await fb.getDoc(fb.doc(db, "users", u.uid));
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data.role !== "admin") {
+              setError("غير مصرح — هذه الصفحة للأدمن فقط");
+              await fb.signOut(auth);
+              setUser(null);
+              setUserData(null);
+            } else {
+              setUserData(data);
+            }
+          }
+        } catch (e) { console.error(e); }
+      } else {
+        setUser(null);
+        setUserData(null);
+      }
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const login = async (email, password) => {
+    setError(null);
+    try {
+      const cred = await fb.signInWithEmailAndPassword(auth, email, password);
+      const snap = await fb.getDoc(fb.doc(db, "users", cred.user.uid));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.role !== "admin") {
+          setError("غير مصرح — هذه الصفحة للأدمن فقط");
+          await fb.signOut(auth);
+          return null;
+        }
+        setUserData(data);
+      }
+      return cred.user;
+    } catch (e) {
+      setError(mapAuthError(e.code));
+      throw e;
+    }
+  };
+
+  const logout = async () => {
+    await fb.signOut(auth);
+    setUser(null);
+    setUserData(null);
+  };
+
+  return (
+    <AuthContext.Provider value={{ user, userData, login, logout, loading, error, setError, db, fb }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+function useAuth() { return useContext(AuthContext); }
+
+function mapAuthError(code) {
+  const errors = {
+    "auth/invalid-email": "البريد غير صالح",
+    "auth/user-disabled": "الحساب معطل",
+    "auth/user-not-found": "لا يوجد حساب",
+    "auth/wrong-password": "كلمة المرور غير صحيحة",
+    "auth/invalid-credential": "البيانات غير صحيحة",
+    "auth/network-request-failed": "مشكلة في الاتصال"
+  };
+  return errors[code] || "حدث خطأ ما";
+}
+
+function formatDate(ts) {
+  if (!ts) return "—";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('ar-DZ', { year: 'numeric', month: 'short', day: 'numeric', hour: '2-digit', minute: '2-digit' });
+}
+
+// ===================== MAIN APP =====================
+function App() {
+  return (
+    <ThemeProvider>
+      <AuthProvider>
+        <AppRouter />
+      </AuthProvider>
+    </ThemeProvider>
+  );
+}
+
+function AppRouter() {
+  const { user, userData, loading, error } = useAuth();
+  const { isDark } = useTheme();
+
+  if (loading) return <LoadingScreen />;
+  if (!user) return <LoginScreen />;
+  if (error) return <ErrorScreen error={error} />;
+  if (userData?.role !== "admin") return <ErrorScreen error="غير مصرح — هذه الصفحة للأدمن فقط" />;
+
+  return <AdminDashboard />;
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen flex items-center justify-center" style={{ background: 'var(--bg-primary)' }}>
+      <div className="text-center">
+        <div className="w-16 h-16 border-4 rounded-full animate-spin mx-auto mb-4" style={{ borderColor: 'var(--border-color)', borderTopColor: 'var(--accent-color)' }}></div>
+        <p className="text-lg" style={{ color: 'var(--accent-color)' }}>جاري التحميل...</p>
+      </div>
+    </div>
+  );
+}
+
+function ErrorScreen({ error }) {
+  const { logout } = useAuth();
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4" style={{ background: 'var(--bg-primary)' }}>
+      <div className="glass rounded-2xl p-8 text-center max-w-md">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full flex items-center justify-center" style={{ background: 'rgba(239,68,68,0.1)' }}>
+          <svg className="w-8 h-8" style={{ color: 'var(--danger-color)' }} fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+        </div>
+        <h2 className="text-xl font-bold mb-2" style={{ color: 'var(--danger-color)' }}>خطأ</h2>
+        <p className="mb-6" style={{ color: 'var(--text-secondary)' }}>{error}</p>
+        <button onClick={logout} className="w-full py-3 rounded-xl border transition-all" style={{ borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>
+          رجوع لتسجيل الدخول
+        </button>
+      </div>
+    </div>
+  );
+}
+
+// ===================== LOGIN SCREEN =====================
+function LoginScreen() {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { login, error, setError } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) return;
+    setIsLoading(true);
+    try { await login(email, password); } catch (e) {}
+    setIsLoading(false);
+  };
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 fade-in" style={{ background: 'var(--bg-primary)' }}>
+      <div className="w-full max-w-md">
+        <div className="absolute top-4 left-4">
+          <button onClick={toggleTheme} className="p-2 rounded-lg glass hover:opacity-80 transition-all">
+            {isDark ? '☀️' : '🌙'}
+          </button>
+        </div>
+        <div className="text-center mb-8">
+          <div className="w-20 h-20 mx-auto mb-4 rounded-2xl flex items-center justify-center border" style={{ background: 'linear-gradient(135deg, #713f12, #a16207)', borderColor: 'var(--accent-color)' }}>
+            <span className="text-3xl">👑</span>
+          </div>
+          <h1 className="text-4xl font-black glow-text tracking-tight" style={{ color: 'var(--accent-color)' }}>FANTEX</h1>
+          <p className="mt-2" style={{ color: 'var(--text-muted)' }}>لوحة تحكم مدير النظام</p>
+        </div>
+        <div className="glass rounded-2xl p-8 shadow-2xl">
+          {error && (
+            <div className="mb-4 p-3 rounded-lg border text-sm flex items-center gap-2" style={{ background: 'rgba(239,68,68,0.1)', borderColor: 'rgba(239,68,68,0.3)', color: 'var(--danger-color)' }}>
+              <svg className="w-4 h-4 flex-shrink-0" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M12 8v4m0 4h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" /></svg>
+              {error}
+            </div>
+          )}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm mb-2" style={{ color: 'var(--text-muted)' }}>البريد الإلكتروني</label>
+              <input type="email" value={email} onChange={e => setEmail(e.target.value)} className="w-full rounded-xl px-4 py-3 transition-all" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} placeholder="admin@fantex.com" required />
+            </div>
+            <div>
+              <label className="block text-sm mb-2" style={{ color: 'var(--text-muted)' }}>كلمة المرور</label>
+              <div className="relative">
+                <input type={showPass ? "text" : "password"} value={password} onChange={e => setPassword(e.target.value)} className="w-full rounded-xl px-4 py-3 transition-all pl-12" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} placeholder="••••••••" required />
+                <button type="button" onClick={() => setShowPass(!showPass)} className="absolute left-3 top-1/2 -translate-y-1/2" style={{ color: 'var(--text-muted)' }}>
+                  {showPass ? <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M13.875 18.825A10.05 10.05 0 0112 19c-4.478 0-10.168-4.293-10.168-9.6 0-1.69.598-3.234 1.582-4.462m3.266 3.266a3 3 0 114.243 4.243m-4.243-4.243L3 3m18 18l-3.266-3.266" /></svg> : <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 12a3 3 0 11-6 0 3 3 0 016 0z" /><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M2.458 12C3.732 7.943 7.523 5 12 5c4.478 0 8.268 2.943 9.542 7-1.274 4.057-5.064 7-9.542 7-4.477 0-8.268-2.943-9.542-7z" /></svg>}
+                </button>
+              </div>
+            </div>
+            <button type="submit" disabled={isLoading} className="gold-btn w-full py-3.5 rounded-xl text-white font-semibold relative overflow-hidden disabled:opacity-50">
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "🔐 دخول لوحة التحكم"}
+              </span>
+            </button>
+          </form>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== ADMIN DASHBOARD =====================
+function AdminDashboard() {
+  const { userData, logout, db, fb } = useAuth();
+  const { isDark, toggleTheme } = useTheme();
+  const [activeTab, setActiveTab] = useState("overview");
+
+  return (
+    <div className="min-h-screen pb-20 md:pb-0" style={{ background: 'var(--bg-primary)' }}>
+      <header className="glass sticky top-0 z-50 border-b" style={{ borderColor: 'var(--border-color)' }}>
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl flex items-center justify-center border" style={{ background: 'linear-gradient(135deg, #713f12, #a16207)', borderColor: 'var(--accent-color)' }}>
+              <span className="text-lg font-bold" style={{ color: 'var(--accent-color)' }}>F</span>
+            </div>
+            <div>
+              <h1 className="font-bold text-lg" style={{ color: 'var(--accent-color)' }}>Fantex Admin</h1>
+              <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{userData?.name} | 👑 مدير النظام</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={toggleTheme} className="p-2 rounded-lg transition-all" style={{ color: 'var(--text-muted)' }} title={isDark ? 'وضع مضيء' : 'وضع مظلم'}>
+              {isDark ? '☀️' : '🌙'}
+            </button>
+            <button onClick={logout} className="p-2 rounded-lg transition-all" style={{ color: 'var(--text-muted)' }}>
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
+        <aside className="hidden md:block w-72 flex-shrink-0">
+          <div className="glass rounded-2xl p-4 space-y-1 sticky top-24">
+            <p className="text-xs font-bold px-4 py-2 uppercase tracking-wider" style={{ color: 'var(--accent-color)' }}>لوحة التحكم</p>
+            <AdminSidebarItem icon="📊" label="نظرة عامة" active={activeTab === "overview"} onClick={() => setActiveTab("overview")} />
+            <AdminSidebarItem icon="🏪" label="المحلات" active={activeTab === "shops"} onClick={() => setActiveTab("shops")} />
+            <AdminSidebarItem icon="🏭" label="المخازن" active={activeTab === "warehouses"} onClick={() => setActiveTab("warehouses")} />
+            <AdminSidebarItem icon="👥" label="المستخدمين" active={activeTab === "users"} onClick={() => setActiveTab("users")} />
+            <AdminSidebarItem icon="📦" label="الأقمشة" active={activeTab === "fabrics"} onClick={() => setActiveTab("fabrics")} />
+            <AdminSidebarItem icon="🧾" label="الطلبيات" active={activeTab === "orders"} onClick={() => setActiveTab("orders")} />
+            <AdminSidebarItem icon="🎨" label="الألوان" active={activeTab === "colors"} onClick={() => setActiveTab("colors")} />
+          </div>
+        </aside>
+
+        <main className="flex-1 min-w-0">
+          {activeTab === "overview" && <OverviewTab db={db} fb={fb} />}
+          {activeTab === "shops" && <ShopsTab db={db} fb={fb} />}
+          {activeTab === "warehouses" && <WarehousesTab db={db} fb={fb} />}
+          {activeTab === "users" && <UsersTab db={db} fb={fb} />}
+          {activeTab === "fabrics" && <FabricsTab db={db} fb={fb} />}
+          {activeTab === "orders" && <OrdersTab db={db} fb={fb} />}
+          {activeTab === "colors" && <ColorsTab db={db} fb={fb} />}
+        </main>
+      </div>
+
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 glass border-t z-50" style={{ borderColor: 'var(--border-color)' }}>
+        <div className="flex justify-around py-2">
+          <MobileNavItem icon="📊" label="عام" active={activeTab === "overview"} onClick={() => setActiveTab("overview")} />
+          <MobileNavItem icon="🏪" label="محلات" active={activeTab === "shops"} onClick={() => setActiveTab("shops")} />
+          <MobileNavItem icon="🏭" label="مخازن" active={activeTab === "warehouses"} onClick={() => setActiveTab("warehouses")} />
+          <MobileNavItem icon="👥" label="مستخدمين" active={activeTab === "users"} onClick={() => setActiveTab("users")} />
+          <MobileNavItem icon="🧾" label="طلبيات" active={activeTab === "orders"} onClick={() => setActiveTab("orders")} />
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+function AdminSidebarItem({ icon, label, active, onClick }) {
+  return (
+    <button onClick={onClick} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-right transition-all duration-200 ${active ? 'font-semibold' : ''}`} style={active ? { background: 'var(--accent-light)', color: 'var(--accent-color)', border: '1px solid var(--accent-color)' } : { color: 'var(--text-muted)' }}>
+      <span className="text-lg">{icon}</span>
+      <span className="font-medium">{label}</span>
+    </button>
+  );
+}
+
+function MobileNavItem({ icon, label, active, onClick }) {
+  return (
+    <button onClick={onClick} className={`flex flex-col items-center gap-1 transition-all ${active ? 'font-semibold' : ''}`} style={active ? { color: 'var(--accent-color)' } : { color: 'var(--text-muted)' }}>
+      <span className="text-xl">{icon}</span>
+      <span className="text-xs">{label}</span>
+    </button>
+  );
+}
+
+// ===================== OVERVIEW TAB =====================
+function OverviewTab({ db, fb }) {
+  const [stats, setStats] = useState({ shops: 0, warehouses: 0, users: 0, fabrics: 0, orders: 0, pending: 0, totalRevenue: 0 });
+  const [recentOrders, setRecentOrders] = useState([]);
+  const [recentUsers, setRecentUsers] = useState([]);
+
+  useEffect(() => {
+    if (!db || !fb) return;
+    loadStats();
+  }, [db, fb]);
+
+  const loadStats = async () => {
+    const [shopSnap, whSnap, userSnap, fabSnap, ordSnap] = await Promise.all([
+      fb.getDocs(fb.collection(db, "shops")),
+      fb.getDocs(fb.collection(db, "warehouses")),
+      fb.getDocs(fb.collection(db, "users")),
+      fb.getDocs(fb.collection(db, "fabrics")),
+      fb.getDocs(fb.query(fb.collection(db, "orders"), fb.orderBy("createdAt", "desc")))
+    ]);
+    const orders = ordSnap.docs.map(d => ({ id: d.id, ...d.data() }));
+    const workers = userSnap.docs.map(d => ({ id: d.id, ...d.data() })).filter(u => u.role !== "admin");
+    const revenue = orders.filter(o => o.status === "delivered").reduce((s, o) => s + (o.total || 0), 0);
+    setStats({
+      shops: shopSnap.size,
+      warehouses: whSnap.size,
+      users: workers.length,
+      fabrics: fabSnap.size,
+      orders: orders.length,
+      pending: orders.filter(o => o.status === "pending").length,
+      totalRevenue: revenue
+    });
+    setRecentOrders(orders.slice(0, 5));
+    setRecentUsers(workers.slice(0, 5));
+  };
+
+  const statCards = [
+    { label: "المحلات", value: stats.shops, icon: "🏪" },
+    { label: "المخازن", value: stats.warehouses, icon: "🏭" },
+    { label: "العاملين", value: stats.users, icon: "👥" },
+    { label: "الأقمشة", value: stats.fabrics, icon: "📦" },
+    { label: "الطلبيات", value: stats.orders, icon: "🧾" },
+    { label: "قيد الانتظار", value: stats.pending, icon: "⏳" },
+    { label: "الإيرادات", value: stats.totalRevenue.toLocaleString() + " د.ج", icon: "💰" }
+  ];
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="glass rounded-2xl p-6" style={{ borderColor: 'var(--accent-color)' }}>
+        <h2 className="text-2xl font-bold mb-1" style={{ color: 'var(--accent-color)' }}>نظرة عامة على النظام</h2>
+        <p style={{ color: 'var(--text-muted)' }}>إحصائيات وأرقام Fantex</p>
+      </div>
+      <div className="grid grid-cols-2 lg:grid-cols-4 gap-4">
+        {statCards.map((s, i) => (
+          <div key={i} className="glass rounded-2xl p-5 card-hover" style={{ borderColor: 'var(--border-color)' }}>
+            <div className="text-2xl mb-2">{s.icon}</div>
+            <p className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>{s.value}</p>
+            <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>{s.label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="grid md:grid-cols-2 gap-6">
+        <div className="glass rounded-2xl p-6">
+          <h3 className="font-bold text-lg mb-4" style={{ color: 'var(--accent-color)' }}>آخر الطلبيات</h3>
+          {recentOrders.length === 0 ? <p className="text-center py-8" style={{ color: 'var(--text-muted)' }}>لا توجد طلبيات</p> : (
+            <div className="space-y-3">
+              {recentOrders.map(o => (
+                <div key={o.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)' }}>
+                  <div>
+                    <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>#{o.receiptNumber || o.id?.slice(-4)}</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{o.workerName}</p>
+                  </div>
+                  <span className={`px-2 py-1 rounded text-xs ${o.status === "pending" ? 'text-yellow-500' : o.status === "approved" ? 'text-blue-500' : 'text-green-500'}`}>
+                    {o.status === "pending" ? "⏳" : o.status === "approved" ? "✅" : "📦"} {o.total?.toLocaleString()} د.ج
+                  </span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+        <div className="glass rounded-2xl p-6">
+          <h3 className="font-bold text-lg mb-4" style={{ color: 'var(--accent-color)' }}>العاملين الجدد</h3>
+          {recentUsers.length === 0 ? <p className="text-center py-8" style={{ color: 'var(--text-muted)' }}>لا يوجد عاملين</p> : (
+            <div className="space-y-3">
+              {recentUsers.map(u => (
+                <div key={u.id} className="flex items-center justify-between p-3 rounded-xl" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)' }}>
+                  <div>
+                    <p className="font-semibold text-sm" style={{ color: 'var(--text-primary)' }}>{u.name} (@{u.username})</p>
+                    <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{u.role === "shop_worker" ? "🏪 عامل محل" : "📦 مسؤول مخزن"}</p>
+                  </div>
+                  <span className="text-xs" style={{ color: 'var(--text-muted)' }}>{u.phone}</span>
+                </div>
+              ))}
+            </div>
+          )}
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== SHOPS TAB =====================
+function ShopsTab({ db, fb }) {
+  const [shops, setShops] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: "", location: "", address: "" });
+
+  useEffect(() => {
+    if (!db || !fb) return;
+    const unsub = fb.onSnapshot(fb.collection(db, "shops"), (snap) => {
+      setShops(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [db, fb]);
+
+  const handleAdd = async () => {
+    if (!form.name || !form.location) return;
+    try {
+      const id = "shop" + Date.now();
+      await fb.setDoc(fb.doc(db, "shops", id), { ...form, id, createdAt: fb.serverTimestamp() });
+      setForm({ name: "", location: "", address: "" });
+      setShowAdd(false);
+    } catch (e) { alert("خطأ"); }
+  };
+
+  const handleUpdate = async (shop) => {
+    try {
+      await fb.updateDoc(fb.doc(db, "shops", shop.id), { name: shop.name, location: shop.location, address: shop.address });
+      setEditing(null);
+    } catch (e) { alert("خطأ"); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("هل أنت متأكد من حذف هذا المحل؟")) return;
+    try { await fb.deleteDoc(fb.doc(db, "shops", id)); } catch (e) { alert("خطأ"); }
+  };
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>إدارة المحلات</h2>
+        <button onClick={() => setShowAdd(!showAdd)} className="shiny-btn px-6 py-2.5 rounded-xl text-white font-medium relative overflow-hidden text-sm">
+          <span className="relative z-10">+ إضافة محل</span>
+        </button>
+      </div>
+      {showAdd && (
+        <div className="glass rounded-2xl p-6 space-y-4 slide-up" style={{ borderColor: 'var(--accent-color)' }}>
+          <h3 className="font-bold" style={{ color: 'var(--accent-color)' }}>محل جديد</h3>
+          <div className="grid md:grid-cols-3 gap-4">
+            <input placeholder="اسم المحل" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+            <input placeholder="المدينة (الجزائر، وهران، قسنطينة...)" value={form.location} onChange={e => setForm({...form, location: e.target.value})} className="rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+            <input placeholder="العنوان التفصيلي" value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setShowAdd(false)} className="px-6 py-2.5 rounded-xl border transition-all" style={{ borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>إلغاء</button>
+            <button onClick={handleAdd} className="gold-btn px-6 py-2.5 rounded-xl text-white font-semibold relative overflow-hidden">
+              <span className="relative z-10">حفظ</span>
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="space-y-3">
+        {shops.map(s => (
+          <div key={s.id} className="glass rounded-2xl p-5 card-hover" style={{ borderColor: 'var(--border-color)' }}>
+            {editing === s.id ? (
+              <div className="space-y-3">
+                <div className="grid md:grid-cols-3 gap-3">
+                  <input defaultValue={s.name} onChange={e => s.name = e.target.value} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+                  <input defaultValue={s.location} onChange={e => s.location = e.target.value} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+                  <input defaultValue={s.address} onChange={e => s.address = e.target.value} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleUpdate(s)} className="px-4 py-2 rounded-lg text-sm" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--success-color)' }}>حفظ</button>
+                  <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>إلغاء</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-bold text-lg" style={{ color: 'var(--text-primary)' }}>{s.name}</h3>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>📍 {s.location}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{s.address}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setEditing(s.id)} className="p-2 rounded-lg transition-all" style={{ color: 'var(--text-muted)' }}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  </button>
+                  <button onClick={() => handleDelete(s.id)} className="p-2 rounded-lg transition-all" style={{ color: 'var(--danger-color)' }}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {shops.length === 0 && (
+          <div className="text-center py-12">
+            <p style={{ color: 'var(--text-muted)' }}>لا توجد محلات مسجلة</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===================== WAREHOUSES TAB =====================
+function WarehousesTab({ db, fb }) {
+  const [warehouses, setWarehouses] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [editing, setEditing] = useState(null);
+  const [form, setForm] = useState({ name: "", location: "", address: "" });
+
+  useEffect(() => {
+    if (!db || !fb) return;
+    const unsub = fb.onSnapshot(fb.collection(db, "warehouses"), (snap) => {
+      setWarehouses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [db, fb]);
+
+  const handleAdd = async () => {
+    if (!form.name || !form.location) return;
+    try {
+      const id = "wh" + Date.now();
+      await fb.setDoc(fb.doc(db, "warehouses", id), { ...form, id, createdAt: fb.serverTimestamp() });
+      setForm({ name: "", location: "", address: "" });
+      setShowAdd(false);
+    } catch (e) { alert("خطأ"); }
+  };
+
+  const handleUpdate = async (wh) => {
+    try {
+      await fb.updateDoc(fb.doc(db, "warehouses", wh.id), { name: wh.name, location: wh.location, address: wh.address });
+      setEditing(null);
+    } catch (e) { alert("خطأ"); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("هل أنت متأكد من حذف هذا المخزن؟")) return;
+    try { await fb.deleteDoc(fb.doc(db, "warehouses", id)); } catch (e) { alert("خطأ"); }
+  };
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>إدارة المخازن</h2>
+        <button onClick={() => setShowAdd(!showAdd)} className="shiny-btn px-6 py-2.5 rounded-xl text-white font-medium relative overflow-hidden text-sm">
+          <span className="relative z-10">+ إضافة مخزن</span>
+        </button>
+      </div>
+      {showAdd && (
+        <div className="glass rounded-2xl p-6 space-y-4 slide-up" style={{ borderColor: 'var(--accent-color)' }}>
+          <h3 className="font-bold" style={{ color: 'var(--accent-color)' }}>مخزن جديد</h3>
+          <div className="grid md:grid-cols-3 gap-4">
+            <input placeholder="اسم المخزن" value={form.name} onChange={e => setForm({...form, name: e.target.value})} className="rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+            <input placeholder="المدينة" value={form.location} onChange={e => setForm({...form, location: e.target.value})} className="rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+            <input placeholder="العنوان التفصيلي" value={form.address} onChange={e => setForm({...form, address: e.target.value})} className="rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setShowAdd(false)} className="px-6 py-2.5 rounded-xl border transition-all" style={{ borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>إلغاء</button>
+            <button onClick={handleAdd} className="gold-btn px-6 py-2.5 rounded-xl text-white font-semibold relative overflow-hidden">
+              <span className="relative z-10">حفظ</span>
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="space-y-3">
+        {warehouses.map(w => (
+          <div key={w.id} className="glass rounded-2xl p-5 card-hover" style={{ borderColor: 'var(--border-color)' }}>
+            {editing === w.id ? (
+              <div className="space-y-3">
+                <div className="grid md:grid-cols-3 gap-3">
+                  <input defaultValue={w.name} onChange={e => w.name = e.target.value} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+                  <input defaultValue={w.location} onChange={e => w.location = e.target.value} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+                  <input defaultValue={w.address} onChange={e => w.address = e.target.value} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => handleUpdate(w)} className="px-4 py-2 rounded-lg text-sm" style={{ background: 'rgba(34,197,94,0.1)', border: '1px solid rgba(34,197,94,0.3)', color: 'var(--success-color)' }}>حفظ</button>
+                  <button onClick={() => setEditing(null)} className="px-4 py-2 rounded-lg text-sm" style={{ background: 'var(--bg-input)', color: 'var(--text-muted)' }}>إلغاء</button>
+                </div>
+              </div>
+            ) : (
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className="font-bold text-lg" style={{ color: 'var(--text-primary)' }}>{w.name}</h3>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>📍 {w.location}</p>
+                  <p className="text-xs mt-1" style={{ color: 'var(--text-muted)' }}>{w.address}</p>
+                </div>
+                <div className="flex gap-2">
+                  <button onClick={() => setEditing(w.id)} className="p-2 rounded-lg transition-all" style={{ color: 'var(--text-muted)' }}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M11 5H6a2 2 0 00-2 2v11a2 2 0 002 2h11a2 2 0 002-2v-5m-1.414-9.414a2 2 0 112.828 2.828L11.828 15H9v-2.828l8.586-8.586z" /></svg>
+                  </button>
+                  <button onClick={() => handleDelete(w.id)} className="p-2 rounded-lg transition-all" style={{ color: 'var(--danger-color)' }}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+              </div>
+            )}
+          </div>
+        ))}
+        {warehouses.length === 0 && (
+          <div className="text-center py-12">
+            <p style={{ color: 'var(--text-muted)' }}>لا توجد مخازن مسجلة</p>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===================== USERS TAB (WITH BLOCK/DELETE) =====================
+function UsersTab({ db, fb }) {
+  const [users, setUsers] = useState([]);
+  const [shops, setShops] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [filterRole, setFilterRole] = useState("");
+  const [searchQuery, setSearchQuery] = useState("");
+
+  useEffect(() => {
+    if (!db || !fb) return;
+    const unsubUsers = fb.onSnapshot(fb.collection(db, "users"), (snap) => {
+      setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    const unsubShops = fb.onSnapshot(fb.collection(db, "shops"), (snap) => {
+      setShops(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    const unsubWh = fb.onSnapshot(fb.collection(db, "warehouses"), (snap) => {
+      setWarehouses(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => { unsubUsers(); unsubShops(); unsubWh(); };
+  }, [db, fb]);
+
+  const roleLabels = { admin: "👑 مدير", warehouse: "📦 مخزن", shop_worker: "🏪 محل" };
+  const statusLabels = { active: "🟢 نشط", blocked: "🔴 محظور" };
+
+  const workerUsers = users.filter(u => u.role !== "admin").filter(u => {
+    if (filterRole && u.role !== filterRole) return false;
+    if (searchQuery) {
+      const q = searchQuery.toLowerCase();
+      return (u.name?.toLowerCase().includes(q) || u.username?.toLowerCase().includes(q) || u.email?.toLowerCase().includes(q));
+    }
+    return true;
+  });
+
+  const handleBlock = async (userId, currentStatus) => {
+    const newStatus = currentStatus === "blocked" ? "active" : "blocked";
+    const action = newStatus === "blocked" ? "حظر" : "تفعيل";
+    if (!confirm(`هل أنت متأكد من ${action} هذا الحساب؟`)) return;
+    try {
+      await fb.updateDoc(fb.doc(db, "users", userId), { status: newStatus, updatedAt: fb.serverTimestamp() });
+    } catch (e) { alert("خطأ في تحديث الحالة"); }
+  };
+
+  const handleDelete = async (userId) => {
+    if (!confirm("هل أنت متأكد من حذف هذا الحساب نهائياً؟ لا يمكن التراجع عن هذا الإجراء!")) return;
+    if (!confirm("تأكيد نهائي: سيتم حذف جميع بيانات المستخدم. هل أنت متأكد؟")) return;
+    try {
+      await fb.deleteDoc(fb.doc(db, "users", userId));
+    } catch (e) { alert("خطأ في حذف الحساب"); }
+  };
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>المستخدمين</h2>
+        <div className="flex gap-2">
+          <select value={filterRole} onChange={e => setFilterRole(e.target.value)} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
+            <option value="">جميع الأدوار</option>
+            <option value="warehouse">📦 مخزن</option>
+            <option value="shop_worker">🏪 محل</option>
+          </select>
+          <input type="text" value={searchQuery} onChange={e => setSearchQuery(e.target.value)} placeholder="بحث..." className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+        </div>
+      </div>
+
+      <div className="glass rounded-2xl overflow-hidden custom-scroll" style={{ borderColor: 'var(--border-color)' }}>
+        <div className="overflow-x-auto">
+          <table className="w-full text-right">
+            <thead style={{ background: 'var(--bg-input)', borderBottom: '1px solid var(--border-color)' }}>
+              <tr>
+                <th className="px-6 py-4 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>الاسم</th>
+                <th className="px-6 py-4 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>اسم المستخدم</th>
+                <th className="px-6 py-4 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>البريد</th>
+                <th className="px-6 py-4 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>الهاتف</th>
+                <th className="px-6 py-4 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>الدور</th>
+                <th className="px-6 py-4 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>الموقع</th>
+                <th className="px-6 py-4 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>الحالة</th>
+                <th className="px-6 py-4 font-medium text-sm" style={{ color: 'var(--text-muted)' }}>الإجراءات</th>
+              </tr>
+            </thead>
+            <tbody className="divide-y" style={{ borderColor: 'var(--border-color)' }}>
+              {workerUsers.map(u => (
+                <tr key={u.id} className="hover:opacity-80 transition-colors" style={{ background: u.status === "blocked" ? 'rgba(239,68,68,0.05)' : 'transparent' }}>
+                  <td className="px-6 py-4 font-medium" style={{ color: 'var(--text-primary)' }}>{u.name}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-muted)' }}>@{u.username}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-muted)' }}>{u.email}</td>
+                  <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-muted)' }}>{u.phone}</td>
+                  <td className="px-6 py-4">
+                    <span className="px-3 py-1 rounded-full text-xs" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-muted)' }}>
+                      {roleLabels[u.role]}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4 text-sm" style={{ color: 'var(--text-muted)' }}>
+                    {u.shopId ? shops.find(s => s.id === u.shopId)?.name || u.shopId : 
+                     u.warehouseId ? warehouses.find(w => w.id === u.warehouseId)?.name || u.warehouseId : "-"}
+                  </td>
+                  <td className="px-6 py-4">
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${u.status === "blocked" ? 'text-red-500' : 'text-green-500'}`} style={{ background: u.status === "blocked" ? 'rgba(239,68,68,0.1)' : 'rgba(34,197,94,0.1)' }}>
+                      {statusLabels[u.status] || "🟢 نشط"}
+                    </span>
+                  </td>
+                  <td className="px-6 py-4">
+                    <div className="flex gap-2">
+                      <button 
+                        onClick={() => handleBlock(u.id, u.status)} 
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                        style={{ 
+                          background: u.status === "blocked" ? 'rgba(34,197,94,0.1)' : 'rgba(234,179,8,0.1)', 
+                          border: `1px solid ${u.status === "blocked" ? 'rgba(34,197,94,0.3)' : 'rgba(234,179,8,0.3)'}`, 
+                          color: u.status === "blocked" ? 'var(--success-color)' : 'var(--accent-color)' 
+                        }}
+                        title={u.status === "blocked" ? "تفعيل الحساب" : "حظر الحساب"}
+                      >
+                        {u.status === "blocked" ? "🔓 تفعيل" : "🔒 حظر"}
+                      </button>
+                      <button 
+                        onClick={() => handleDelete(u.id)} 
+                        className="px-3 py-1.5 rounded-lg text-xs font-medium transition-all"
+                        style={{ background: 'rgba(239,68,68,0.1)', border: '1px solid rgba(239,68,68,0.3)', color: 'var(--danger-color)' }}
+                        title="حذف نهائي"
+                      >
+                        🗑️ حذف
+                      </button>
+                    </div>
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+
+      {workerUsers.length === 0 && <p className="text-center py-8" style={{ color: 'var(--text-muted)' }}>لا يوجد مستخدمين مسجلين</p>}
+
+      <div className="glass rounded-2xl p-4" style={{ borderColor: 'var(--border-color)' }}>
+        <p className="text-sm" style={{ color: 'var(--text-muted)' }}>
+          <span className="font-semibold" style={{ color: 'var(--text-primary)' }}>ملاحظة:</span> 
+          الحساب المحظور لا يستطيع تسجيل الدخول أو استقبال/إرسال أي طلبيات. 
+          الحذف النهائي يزيل الحساب من النظام بشكل كامل.
+        </p>
+      </div>
+    </div>
+  );
+}
+
+// ===================== FABRICS TAB =====================
+function FabricsTab({ db, fb }) {
+  const [fabrics, setFabrics] = useState([]);
+  const [colors, setColors] = useState([]);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newFabric, setNewFabric] = useState({ name: "", category: "", price: "", imageUrl: "", selectedColors: [] });
+
+  useEffect(() => {
+    if (!db || !fb) return;
+    const unsubFab = fb.onSnapshot(fb.collection(db, "fabrics"), (snap) => {
+      setFabrics(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    const unsubCol = fb.onSnapshot(fb.collection(db, "colors"), (snap) => {
+      setColors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => { unsubFab(); unsubCol(); };
+  }, [db, fb]);
+
+  const handleAdd = async () => {
+    if (!newFabric.name || !newFabric.price || newFabric.selectedColors.length === 0) return;
+    try {
+      const colorsData = newFabric.selectedColors.map(cid => {
+        const c = colors.find(col => col.id === cid);
+        return { name: c.name, hex: c.hex, stock: 0 };
+      });
+      await fb.addDoc(fb.collection(db, "fabrics"), {
+        name: newFabric.name,
+        category: newFabric.category,
+        price: Number(newFabric.price),
+        imageUrl: newFabric.imageUrl,
+        colors: colorsData,
+        createdAt: fb.serverTimestamp()
+      });
+      setShowAdd(false);
+      setNewFabric({ name: "", category: "", price: "", imageUrl: "", selectedColors: [] });
+    } catch (e) { alert("خطأ"); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("هل أنت متأكد؟")) return;
+    try { await fb.deleteDoc(fb.doc(db, "fabrics", id)); } catch (e) { alert("خطأ"); }
+  };
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>إدارة الأقمشة</h2>
+        <button onClick={() => setShowAdd(!showAdd)} className="shiny-btn px-6 py-2.5 rounded-xl text-white font-medium relative overflow-hidden text-sm">
+          <span className="relative z-10">+ قماش جديد</span>
+        </button>
+      </div>
+      {showAdd && (
+        <div className="glass rounded-2xl p-6 space-y-4 slide-up" style={{ borderColor: 'var(--accent-color)' }}>
+          <h3 className="font-bold" style={{ color: 'var(--accent-color)' }}>قماش جديد</h3>
+          <div className="grid md:grid-cols-2 gap-4">
+            <input placeholder="اسم القماش" value={newFabric.name} onChange={e => setNewFabric({...newFabric, name: e.target.value})} className="rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+            <input placeholder="الفئة" value={newFabric.category} onChange={e => setNewFabric({...newFabric, category: e.target.value})} className="rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+          </div>
+          <input type="number" placeholder="السعر (د.ج)" value={newFabric.price} onChange={e => setNewFabric({...newFabric, price: e.target.value})} className="w-full rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+          <input type="url" placeholder="رابط الصورة (URL)" value={newFabric.imageUrl} onChange={e => setNewFabric({...newFabric, imageUrl: e.target.value})} className="w-full rounded-xl px-4 py-3 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+          <div>
+            <p className="text-sm mb-3" style={{ color: 'var(--text-muted)' }}>اختر الألوان:</p>
+            <div className="flex flex-wrap gap-3">
+              {colors.map(c => (
+                <button key={c.id} onClick={() => {
+                  const sc = newFabric.selectedColors.includes(c.id) 
+                    ? newFabric.selectedColors.filter(id => id !== c.id)
+                    : [...newFabric.selectedColors, c.id];
+                  setNewFabric({...newFabric, selectedColors: sc});
+                }} className={`flex items-center gap-2 px-4 py-2 rounded-xl border transition-all ${newFabric.selectedColors.includes(c.id) ? 'border-yellow-500' : ''}`} style={newFabric.selectedColors.includes(c.id) ? { background: 'var(--accent-light)', borderColor: 'var(--accent-color)' } : { background: 'var(--bg-input)', borderColor: 'var(--border-color)' }}>
+                  <div className="w-5 h-5 rounded-full border" style={{ backgroundColor: c.hex, borderColor: 'var(--border-color)' }}></div>
+                  <span className="text-sm" style={{ color: 'var(--text-primary)' }}>{c.name}</span>
+                </button>
+              ))}
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setShowAdd(false)} className="px-6 py-2.5 rounded-xl border transition-all" style={{ borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>إلغاء</button>
+            <button onClick={handleAdd} className="gold-btn px-6 py-2.5 rounded-xl text-white font-semibold relative overflow-hidden">
+              <span className="relative z-10">حفظ</span>
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {fabrics.map(f => (
+          <div key={f.id} className="glass rounded-2xl overflow-hidden card-hover" style={{ borderColor: 'var(--border-color)' }}>
+            {f.imageUrl && (
+              <div className="h-40 overflow-hidden" style={{ background: 'var(--bg-input)' }}>
+                <img src={f.imageUrl} alt={f.name} className="w-full h-full object-cover" onError={e => e.target.style.display='none'} />
+              </div>
+            )}
+            <div className="p-5">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <h3 className="font-bold text-lg" style={{ color: 'var(--text-primary)' }}>{f.name}</h3>
+                  <p className="text-sm" style={{ color: 'var(--text-muted)' }}>{f.category}</p>
+                </div>
+                <div className="flex items-center gap-2">
+                  <p className="text-xl font-bold" style={{ color: 'var(--text-primary)' }}>{f.price?.toLocaleString()} د.ج</p>
+                  <button onClick={() => handleDelete(f.id)} className="p-1" style={{ color: 'var(--danger-color)' }}>
+                    <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                  </button>
+                </div>
+              </div>
+              <div className="flex flex-wrap gap-2">
+                {f.colors?.map((c, i) => (
+                  <div key={i} className="flex items-center gap-1.5 rounded-lg px-2.5 py-1 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)' }}>
+                    <div className="w-3.5 h-3.5 rounded-full border" style={{ backgroundColor: c.hex, borderColor: 'var(--border-color)' }}></div>
+                    <span className="text-xs" style={{ color: 'var(--text-secondary)' }}>{c.name}</span>
+                    <span className="text-xs" style={{ color: 'var(--text-muted)' }}>({c.stock})</span>
+                  </div>
+                ))}
+              </div>
+            </div>
+          </div>
+        ))}
+        {fabrics.length === 0 && <p className="col-span-full text-center py-12" style={{ color: 'var(--text-muted)' }}>لا توجد أقمشة مسجلة</p>}
+      </div>
+    </div>
+  );
+}
+
+// ===================== ORDERS TAB =====================
+function OrdersTab({ db, fb }) {
+  const [orders, setOrders] = useState([]);
+  const [shops, setShops] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [users, setUsers] = useState([]);
+  const [filter, setFilter] = useState("all");
+  const [filterShop, setFilterShop] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+
+  useEffect(() => {
+    if (!db || !fb) return;
+    const unsubOrders = fb.onSnapshot(fb.query(fb.collection(db, "orders"), fb.orderBy("createdAt", "desc")), (snap) => {
+      setOrders(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    const unsubShops = fb.onSnapshot(fb.collection(db, "shops"), (snap) => setShops(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubWh = fb.onSnapshot(fb.collection(db, "warehouses"), (snap) => setWarehouses(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    const unsubUsers = fb.onSnapshot(fb.collection(db, "users"), (snap) => setUsers(snap.docs.map(d => ({ id: d.id, ...d.data() }))));
+    return () => { unsubOrders(); unsubShops(); unsubWh(); unsubUsers(); };
+  }, [db, fb]);
+
+  const filtered = orders.filter(o => {
+    let match = true;
+    if (filter !== "all" && o.status !== filter) match = false;
+    if (filterShop && o.shopId !== filterShop) match = false;
+    if (filterDate && o.createdAt) {
+      const d = o.createdAt.toDate ? o.createdAt.toDate() : new Date(o.createdAt);
+      const fd = new Date(filterDate);
+      if (d.toDateString() !== fd.toDateString()) match = false;
+    }
+    return match;
+  });
+
+  return (
+    <div className="space-y-6 fade-in">
+      <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>جميع الطلبيات</h2>
+      <div className="glass rounded-2xl p-4 space-y-3" style={{ borderColor: 'var(--accent-color)' }}>
+        <div className="grid md:grid-cols-3 gap-3">
+          <select value={filter} onChange={e => setFilter(e.target.value)} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
+            <option value="all">جميع الحالات</option>
+            <option value="pending">⏳ قيد الانتظار</option>
+            <option value="approved">✅ مقبولة</option>
+            <option value="delivered">📦 تم التسليم</option>
+          </select>
+          <select value={filterShop} onChange={e => setFilterShop(e.target.value)} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
+            <option value="">جميع المحلات</option>
+            {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+        </div>
+        <button onClick={() => { setFilter("all"); setFilterShop(""); setFilterDate(""); }} className="px-4 py-2 rounded-lg text-sm transition-all" style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}>إعادة تعيين</button>
+      </div>
+      <div className="space-y-3">
+        {filtered.length === 0 ? <p className="text-center py-12" style={{ color: 'var(--text-muted)' }}>لا توجد طلبيات</p> : (
+          filtered.map(o => (
+            <div key={o.id} className="glass rounded-2xl p-5 card-hover" style={{ borderColor: 'var(--border-color)' }}>
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h3 className="font-bold" style={{ color: 'var(--text-primary)' }}>#{o.receiptNumber || o.id?.slice(-4)}</h3>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium ${o.status === "pending" ? 'text-yellow-500' : o.status === "approved" ? 'text-blue-500' : 'text-green-500'}`} style={{ background: o.status === "pending" ? 'rgba(234,179,8,0.1)' : o.status === "approved" ? 'rgba(59,130,246,0.1)' : 'rgba(34,197,94,0.1)', border: `1px solid ${o.status === "pending" ? 'rgba(234,179,8,0.3)' : o.status === "approved" ? 'rgba(59,130,246,0.3)' : 'rgba(34,197,94,0.3)'}` }}>
+                      {o.status === "pending" ? "⏳ قيد الانتظار" : o.status === "approved" ? "✅ مقبولة" : "📦 تم التسليم"}
+                    </span>
+                  </div>
+                  <p className="text-sm mt-1" style={{ color: 'var(--text-muted)' }}>
+                    بواسطة: {o.workerName} (@{o.workerUsername}) | 
+                    المحل: {shops.find(s => s.id === o.shopId)?.name || o.shopId} | 
+                    {formatDate(o.createdAt)}
+                  </p>
+                </div>
+                <p className="text-xl font-bold" style={{ color: 'var(--accent-color)' }}>{o.total?.toLocaleString()} د.ج</p>
+              </div>
+              <div className="flex flex-wrap gap-2 mb-4">
+                {o.items?.map((item, i) => (
+                  <div key={i} className="flex items-center gap-2 rounded-lg px-3 py-1.5 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)' }}>
+                    <div className="w-3 h-3 rounded-full border" style={{ backgroundColor: item.colorHex, borderColor: 'var(--border-color)' }}></div>
+                    <span style={{ color: 'var(--text-secondary)' }}>{item.fabricName} — {item.color} × {item.quantity}</span>
+                  </div>
+                ))}
+              </div>
+              {o.receiptImage && (
+                <div className="mb-4">
+                  <img src={o.receiptImage} alt="البون" className="max-h-48 rounded-xl border cursor-pointer hover:opacity-80 transition-opacity" style={{ borderColor: 'var(--border-color)' }} onClick={() => window.open(o.receiptImage, '_blank')} />
+                </div>
+              )}
+            </div>
+          ))
+        )}
+      </div>
+    </div>
+  );
+}
+
+// ===================== COLORS TAB =====================
+function ColorsTab({ db, fb }) {
+  const [colors, setColors] = useState([]);
+  const [newColor, setNewColor] = useState({ name: "", hex: "#808080" });
+  const [showAdd, setShowAdd] = useState(false);
+
+  useEffect(() => {
+    if (!db || !fb) return;
+    const unsub = fb.onSnapshot(fb.collection(db, "colors"), (snap) => {
+      setColors(snap.docs.map(d => ({ id: d.id, ...d.data() })));
+    });
+    return () => unsub();
+  }, [db, fb]);
+
+  const handleAdd = async () => {
+    if (!newColor.name) return;
+    try {
+      await fb.addDoc(fb.collection(db, "colors"), { ...newColor, createdAt: fb.serverTimestamp() });
+      setNewColor({ name: "", hex: "#808080" });
+      setShowAdd(false);
+    } catch (e) { alert("خطأ"); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("هل أنت متأكد؟")) return;
+    try { await fb.deleteDoc(fb.doc(db, "colors", id)); } catch (e) { alert("خطأ"); }
+  };
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>قائمة الألوان</h2>
+        <button onClick={() => setShowAdd(!showAdd)} className="shiny-btn px-6 py-2.5 rounded-xl text-white font-medium relative overflow-hidden text-sm">
+          <span className="relative z-10">+ لون جديد</span>
+        </button>
+      </div>
+      {showAdd && (
+        <div className="glass rounded-2xl p-6 space-y-4 slide-up" style={{ borderColor: 'var(--accent-color)' }}>
+          <div className="flex gap-4">
+            <input placeholder="اسم اللون" value={newColor.name} onChange={e => setNewColor({...newColor, name: e.target.value})} className="flex-1 rounded-xl px-4 py-3" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+            <input type="color" value={newColor.hex} onChange={e => setNewColor({...newColor, hex: e.target.value})} className="w-20 h-12 rounded-xl bg-transparent cursor-pointer" />
+          </div>
+          <div className="flex gap-3">
+            <button onClick={() => setShowAdd(false)} className="px-6 py-2.5 rounded-xl border transition-all" style={{ borderColor: 'var(--border-color)', color: 'var(--text-secondary)' }}>إلغاء</button>
+            <button onClick={handleAdd} className="gold-btn px-6 py-2.5 rounded-xl text-white font-semibold relative overflow-hidden">
+              <span className="relative z-10">حفظ</span>
+            </button>
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-6 gap-3">
+        {colors.map(c => (
+          <div key={c.id} className="glass rounded-xl p-4 text-center card-hover relative group" style={{ borderColor: 'var(--border-color)' }}>
+            <div className="w-12 h-12 rounded-full mx-auto mb-2 border-2" style={{ backgroundColor: c.hex, borderColor: 'var(--border-color)' }}></div>
+            <p className="font-medium text-sm" style={{ color: 'var(--text-primary)' }}>{c.name}</p>
+            <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{c.hex}</p>
+            <button onClick={() => handleDelete(c.id)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 transition-all" style={{ color: 'var(--danger-color)' }}>
+              <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M6 18L18 6M6 6l12 12" /></svg>
+            </button>
+          </div>
+        ))}
+      </div>
+      {colors.length === 0 && <p className="text-center py-12" style={{ color: 'var(--text-muted)' }}>لا توجد ألوان مسجلة</p>}
+    </div>
+  );
+}
+
+// ===================== RENDER =====================
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>

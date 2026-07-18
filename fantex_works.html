@@ -1,0 +1,1455 @@
+<!DOCTYPE html>
+<html lang="ar" dir="rtl">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1.0">
+<title>Fantex - نظام العاملين</title>
+<script src="https://cdn.tailwindcss.com"></script>
+<script src="https://unpkg.com/react@18/umd/react.production.min.js"></script>
+<script src="https://unpkg.com/react-dom@18/umd/react-dom.production.min.js"></script>
+<script src="https://unpkg.com/@babel/standalone/babel.min.js"></script>
+<script type="module">
+  import { initializeApp } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-app.js";
+  import { getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-auth.js";
+  import { getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot } from "https://www.gstatic.com/firebasejs/10.12.2/firebase-firestore.js";
+  window.firebaseApp = { initializeApp, getAuth, createUserWithEmailAndPassword, signInWithEmailAndPassword, signOut, onAuthStateChanged, updateProfile, getFirestore, doc, setDoc, getDoc, collection, getDocs, addDoc, updateDoc, deleteDoc, query, where, orderBy, serverTimestamp, onSnapshot };
+</script>
+<style>
+  @import url('https://fonts.googleapis.com/css2?family=Cairo:wght@300;400;500;600;700;800&display=swap');
+  * { font-family: 'Cairo', sans-serif; }
+  body { background: #0a0a0a; }
+  .glass { background: rgba(255,255,255,0.03); backdrop-filter: blur(20px); border: 1px solid rgba(255,255,255,0.08); }
+  .shiny-btn { background: linear-gradient(135deg, #1a1a2e 0%, #16213e 50%, #0f3460 100%); position: relative; overflow: hidden; }
+  .shiny-btn::before { content: ''; position: absolute; top: -50%; left: -50%; width: 200%; height: 200%; background: linear-gradient(45deg, transparent 30%, rgba(255,255,255,0.1) 50%, transparent 70%); animation: shine 3s infinite; }
+  @keyframes shine { 0% { transform: translateX(-100%) rotate(45deg); } 100% { transform: translateX(100%) rotate(45deg); } }
+  .fade-in { animation: fadeIn 0.5s ease-out; }
+  @keyframes fadeIn { from { opacity: 0; transform: translateY(20px); } to { opacity: 1; transform: translateY(0); } }
+  .slide-up { animation: slideUp 0.4s ease-out; }
+  @keyframes slideUp { from { opacity: 0; transform: translateY(30px); } to { opacity: 1; transform: translateY(0); } }
+  .glow-text { text-shadow: 0 0 20px rgba(148,163,184,0.5); }
+  .card-hover { transition: all 0.3s ease; }
+  .card-hover:hover { transform: translateY(-3px); box-shadow: 0 20px 40px rgba(0,0,0,0.4); border-color: rgba(148,163,184,0.2); }
+  input:focus, select:focus, textarea:focus { outline: none; box-shadow: 0 0 0 2px rgba(148,163,184,0.3); }
+  .new-badge { animation: pulse-badge 2s infinite; }
+  @keyframes pulse-badge { 0%, 100% { opacity: 1; } 50% { opacity: 0.7; } }
+  .notification-dot { animation: blink 1s infinite; }
+  @keyframes blink { 0%, 100% { opacity: 1; } 50% { opacity: 0.3; } }
+  .scrollbar-hide::-webkit-scrollbar { display: none; }
+  .scrollbar-hide { -ms-overflow-style: none; scrollbar-width: none; }
+  .modal-overlay { position: fixed; inset: 0; background: rgba(0,0,0,0.8); backdrop-filter: blur(4px); z-index: 1000; display: flex; align-items: center; justify-content: center; padding: 16px; }
+  .modal-box { background: #111; border: 1px solid rgba(255,255,255,0.1); border-radius: 20px; padding: 28px; width: 100%; max-width: 520px; max-height: 90vh; overflow-y: auto; }
+  .inp { width: 100%; background: rgba(255,255,255,0.04); border: 1px solid rgba(255,255,255,0.1); border-radius: 12px; padding: 12px 16px; color: white; transition: all 0.2s; }
+  .inp:focus { border-color: rgba(148,163,184,0.4); outline: none; }
+  .post-card { background: rgba(255,255,255,0.02); border: 1px solid rgba(255,255,255,0.07); border-radius: 18px; overflow: hidden; transition: all 0.3s; }
+  .post-card:hover { border-color: rgba(255,255,255,0.15); }
+</style>
+</head>
+<body>
+<div id="root"></div>
+<script type="text/babel">
+const { useState, useEffect, useContext, createContext, useRef } = React;
+
+// ===================== FIREBASE CONFIG =====================
+const firebaseConfig = {
+  apiKey: "AIzaSyD8RQ0oYPrg55pEJPo6ylwG-d7IPjbiru0",
+  authDomain: "fantex.firebaseapp.com",
+  projectId: "fantex",
+  storageBucket: "fantex.firebasestorage.app",
+  messagingSenderId: "368377187521",
+  appId: "1:368377187521:web:279c079cdad3f9f0d5d840"
+};
+
+const CLOUDINARY_CLOUD = "dpkmxixp2";
+const CLOUDINARY_PRESET = "fantex_bons";
+const DRIVERS = ["رضوان","محمد","حكيم","جمال"];
+
+let app, auth, db;
+let fb = null;
+
+// ===================== AUTH CONTEXT =====================
+const AuthContext = createContext();
+
+function AuthProvider({ children }) {
+  const [user, setUser] = useState(null);
+  const [userData, setUserData] = useState(null);
+  const [loading, setLoading] = useState(true);
+  const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (!window.firebaseApp) { setLoading(false); setError("Firebase لم يتم تحميله"); return; }
+    fb = window.firebaseApp;
+    app = fb.initializeApp(firebaseConfig);
+    auth = fb.getAuth(app);
+    db = fb.getFirestore(app);
+    const unsub = fb.onAuthStateChanged(auth, async (u) => {
+      if (u) {
+        setUser(u);
+        try {
+          const snap = await fb.getDoc(fb.doc(db, "users", u.uid));
+          if (snap.exists()) {
+            const data = snap.data();
+            if (data.status === "blocked") { setError("هذا الحساب محظور."); await fb.signOut(auth); setUser(null); setUserData(null); }
+            else setUserData({ ...data, uid: u.uid });
+          }
+        } catch(e) { console.error(e); }
+      } else { setUser(null); setUserData(null); }
+      setLoading(false);
+    });
+    return () => unsub();
+  }, []);
+
+  const login = async (email, password) => {
+    setError(null);
+    try {
+      const cred = await fb.signInWithEmailAndPassword(auth, email, password);
+      const snap = await fb.getDoc(fb.doc(db, "users", cred.user.uid));
+      if (snap.exists()) {
+        const data = snap.data();
+        if (data.status === "blocked") { setError("هذا الحساب محظور."); await fb.signOut(auth); return null; }
+        setUserData({ ...data, uid: cred.user.uid });
+      }
+      return cred.user;
+    } catch(e) { setError(mapAuthError(e.code)); throw e; }
+  };
+
+  const register = async (email, password, userInfo) => {
+    setError(null);
+    try {
+      const cred = await fb.createUserWithEmailAndPassword(auth, email, password);
+      await fb.updateProfile(cred.user, { displayName: userInfo.name });
+      await fb.setDoc(fb.doc(db, "users", cred.user.uid), {
+        uid: cred.user.uid, name: userInfo.name, username: userInfo.username,
+        phone: userInfo.phone, email, role: userInfo.role,
+        shopId: userInfo.shopId || null, warehouseId: userInfo.warehouseId || null,
+        status: "active", createdAt: fb.serverTimestamp()
+      });
+      const snap = await fb.getDoc(fb.doc(db, "users", cred.user.uid));
+      setUserData({ ...snap.data(), uid: cred.user.uid });
+      return cred.user;
+    } catch(e) { setError(mapAuthError(e.code)); throw e; }
+  };
+
+  const logout = async () => { await fb.signOut(auth); setUser(null); setUserData(null); };
+
+  return (
+    <AuthContext.Provider value={{ user, userData, login, register, logout, loading, error, setError, db, fb }}>
+      {children}
+    </AuthContext.Provider>
+  );
+}
+
+function useAuth() { return useContext(AuthContext); }
+
+function mapAuthError(code) {
+  const e = {
+    "auth/invalid-email": "البريد غير صالح",
+    "auth/user-disabled": "الحساب معطل",
+    "auth/user-not-found": "لا يوجد حساب بهذا البريد",
+    "auth/wrong-password": "كلمة المرور غير صحيحة",
+    "auth/email-already-in-use": "البريد مستخدم بالفعل",
+    "auth/weak-password": "كلمة المرور ضعيفة (6 أحرف على الأقل)",
+    "auth/invalid-credential": "البريد أو كلمة المرور غير صحيحة",
+    "auth/network-request-failed": "مشكلة في الاتصال"
+  };
+  return e[code] || "حدث خطأ، حاول مرة أخرى";
+}
+
+// ===================== HELPERS =====================
+function isNewItem(ts) {
+  if (!ts) return false;
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return (new Date() - d) / (1000*60*60*24) <= 3;
+}
+
+function formatDate(ts) {
+  if (!ts) return "—";
+  const d = ts.toDate ? ts.toDate() : new Date(ts);
+  return d.toLocaleDateString('ar-DZ', { year:'numeric', month:'short', day:'numeric', hour:'2-digit', minute:'2-digit' });
+}
+
+async function uploadToCloudinary(file) {
+  const fd = new FormData();
+  fd.append("file", file);
+  fd.append("upload_preset", CLOUDINARY_PRESET);
+  try {
+    const res = await fetch(`https://api.cloudinary.com/v1_1/${CLOUDINARY_CLOUD}/image/upload`, { method:"POST", body:fd });
+    const data = await res.json();
+    return data.secure_url || null;
+  } catch(e) { console.error(e); return null; }
+}
+
+async function seedDefaultData(db, fb) {
+  const shops = [
+    { id:"shop1", name:"محل 1", location:"الجزائر العاصمة", address:"حي القصبة" },
+    { id:"shop2", name:"محل 2", location:"الجزائر العاصمة", address:"وسط المدينة" }
+  ];
+  const warehouses = [
+    { id:"wh1", name:"مخزن 1", location:"الجزائر العاصمة", address:"المنطقة الصناعية" },
+    { id:"wh2", name:"مخزن 2", location:"الجزائر العاصمة", address:"حي باب الزوار" },
+    { id:"wh3", name:"مخزن 3", location:"الجزائر العاصمة", address:"حي الحراش" }
+  ];
+  for (const s of shops) {
+    const snap = await fb.getDoc(fb.doc(db,"shops",s.id));
+    if (!snap.exists()) await fb.setDoc(fb.doc(db,"shops",s.id), { ...s, createdAt:fb.serverTimestamp() });
+  }
+  for (const w of warehouses) {
+    const snap = await fb.getDoc(fb.doc(db,"warehouses",w.id));
+    if (!snap.exists()) await fb.setDoc(fb.doc(db,"warehouses",w.id), { ...w, createdAt:fb.serverTimestamp() });
+  }
+}
+
+async function notifyUser(db, fb, userId, title, body) {
+  try { await fb.addDoc(fb.collection(db,"notifications"), { userId, title, body, read:false, createdAt:fb.serverTimestamp() }); } catch(e) {}
+}
+
+async function notifyAllShopWorkers(db, fb, title, body) {
+  try {
+    const snap = await fb.getDocs(fb.query(fb.collection(db,"users"), fb.where("role","==","shop_worker")));
+    for (const d of snap.docs) await notifyUser(db, fb, d.data().uid, title, body);
+  } catch(e) {}
+}
+
+async function notifyWarehouseTeam(db, fb, warehouseId, title, body) {
+  try {
+    const snap = await fb.getDocs(fb.query(fb.collection(db,"users"), fb.where("role","==","warehouse"), fb.where("warehouseId","==",warehouseId)));
+    for (const d of snap.docs) await notifyUser(db, fb, d.data().uid, title, body);
+  } catch(e) {}
+}
+
+// ===================== STATUS HELPERS =====================
+function statusLabel(s) {
+  const m = { pending:"⏳ قيد الانتظار", processing:"🔧 جاري التجهيز", shipped:"🚚 تم الإرسال", delivered:"📦 تم التسليم" };
+  return m[s] || s;
+}
+function statusColor(s) {
+  const m = { pending:"text-yellow-400 bg-yellow-900/20 border-yellow-800/40", processing:"text-blue-400 bg-blue-900/20 border-blue-800/40", shipped:"text-purple-400 bg-purple-900/20 border-purple-800/40", delivered:"text-green-400 bg-green-900/20 border-green-800/40" };
+  return m[s] || "text-gray-400";
+}
+
+// ===================== MAIN APP =====================
+function App() { return <AuthProvider><AppRouter /></AuthProvider>; }
+
+function AppRouter() {
+  const { user, userData, loading } = useAuth();
+  const [screen, setScreen] = useState("main");
+  useEffect(() => {
+    if (loading) return;
+    if (user && userData) {
+      if (userData.role === "admin") setScreen("admin_redirect");
+      else setScreen("dashboard");
+    } else if (!user) setScreen("main");
+  }, [user, userData, loading]);
+  if (loading) return <LoadingScreen />;
+  return (
+    <div className="min-h-screen bg-black text-gray-100 overflow-x-hidden">
+      {screen === "main" && <MainScreen onNavigate={setScreen} />}
+      {screen === "login" && <LoginScreen onNavigate={setScreen} />}
+      {screen === "register" && <RegisterScreen onNavigate={setScreen} />}
+      {screen === "dashboard" && <Dashboard onNavigate={setScreen} />}
+      {screen === "admin_redirect" && <AdminRedirect />}
+    </div>
+  );
+}
+
+function LoadingScreen() {
+  return (
+    <div className="min-h-screen bg-black flex items-center justify-center">
+      <div className="text-center">
+        <div className="w-16 h-16 border-4 border-gray-700 border-t-gray-400 rounded-full animate-spin mx-auto mb-4"></div>
+        <p className="text-gray-400 text-lg">جاري التحميل...</p>
+      </div>
+    </div>
+  );
+}
+
+function AdminRedirect() {
+  const { logout } = useAuth();
+  return (
+    <div className="min-h-screen bg-black flex items-center justify-center px-4">
+      <div className="glass rounded-2xl p-8 text-center max-w-md">
+        <div className="w-16 h-16 mx-auto mb-4 rounded-full bg-yellow-900/30 flex items-center justify-center"><span className="text-3xl">👑</span></div>
+        <h2 className="text-2xl font-bold text-yellow-500 mb-2">مدير النظام</h2>
+        <p className="text-gray-400 mb-6">يرجى استخدام صفحة الأدمن المخصصة</p>
+        <button onClick={() => window.open("fantex_admin.html","_blank")} className="shiny-btn w-full py-3 rounded-xl text-white font-semibold relative overflow-hidden mb-3">
+          <span className="relative z-10">فتح لوحة التحكم</span>
+        </button>
+        <button onClick={logout} className="w-full py-3 rounded-xl border border-gray-700 text-gray-400 hover:bg-gray-800 transition-all">تسجيل خروج</button>
+      </div>
+    </div>
+  );
+}
+
+// ===================== MAIN SCREEN =====================
+function MainScreen({ onNavigate }) {
+  return (
+    <div className="min-h-screen flex flex-col items-center justify-center relative overflow-hidden px-4">
+      <div className="absolute inset-0 bg-[radial-gradient(ellipse_at_top,_var(--tw-gradient-stops))] from-gray-800 via-black to-black opacity-50"></div>
+      <div className="absolute top-20 left-20 w-72 h-72 bg-gray-700 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse"></div>
+      <div className="absolute bottom-20 right-20 w-72 h-72 bg-gray-600 rounded-full mix-blend-multiply filter blur-3xl opacity-20 animate-pulse" style={{animationDelay:'2s'}}></div>
+      <div className="relative z-10 text-center fade-in max-w-md w-full">
+        <div className="mb-10">
+          <div className="w-24 h-24 mx-auto mb-6 rounded-2xl bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center shadow-2xl shadow-gray-900/50">
+            <svg className="w-12 h-12 text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M19 11H5m14 0a2 2 0 012 2v6a2 2 0 01-2 2H5a2 2 0 01-2-2v-6a2 2 0 012-2m14 0V9a2 2 0 00-2-2M5 11V9a2 2 0 012-2m0 0V5a2 2 0 012-2h6a2 2 0 012 2v2M7 7h10" /></svg>
+          </div>
+          <h1 className="text-5xl font-black mb-2 glow-text tracking-tight">FANTEX</h1>
+          <p className="text-gray-400 text-lg font-light">نظام إدارة الأقمشة بالجملة</p>
+        </div>
+        <div className="space-y-4">
+          <button onClick={() => onNavigate("login")} className="shiny-btn w-full py-4 rounded-xl text-white font-semibold text-lg relative overflow-hidden">
+            <span className="relative z-10">🔐 تسجيل الدخول</span>
+          </button>
+          <button onClick={() => onNavigate("register")} className="w-full py-4 rounded-xl bg-gray-900 border border-gray-700 text-gray-300 font-semibold text-lg hover:bg-gray-800 hover:border-gray-600 transition-all">
+            📝 إنشاء حساب جديد
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== LOGIN =====================
+function LoginScreen({ onNavigate }) {
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [showPass, setShowPass] = useState(false);
+  const [isLoading, setIsLoading] = useState(false);
+  const { login, error, setError } = useAuth();
+  const handleSubmit = async (e) => {
+    e.preventDefault();
+    if (!email || !password) return;
+    setIsLoading(true);
+    try { await login(email, password); } catch(e) {}
+    setIsLoading(false);
+  };
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 fade-in">
+      <div className="w-full max-w-md">
+        <button onClick={() => { setError(null); onNavigate("main"); }} className="mb-6 text-gray-500 hover:text-gray-300 flex items-center gap-2 transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>رجوع
+        </button>
+        <div className="glass rounded-2xl p-8 shadow-2xl">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold mb-2">تسجيل الدخول</h2>
+            <p className="text-gray-400">عامل محل أو مخزن</p>
+          </div>
+          {error && <div className="mb-4 p-3 rounded-lg bg-red-900/30 border border-red-800/50 text-red-300 text-sm">{error}</div>}
+          <form onSubmit={handleSubmit} className="space-y-5">
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">البريد الإلكتروني</label>
+              <input type="email" value={email} onChange={e=>setEmail(e.target.value)} className="inp" placeholder="example@email.com" required />
+            </div>
+            <div>
+              <label className="block text-sm text-gray-400 mb-2">كلمة المرور</label>
+              <div className="relative">
+                <input type={showPass?"text":"password"} value={password} onChange={e=>setPassword(e.target.value)} className="inp" style={{paddingLeft:'48px'}} placeholder="••••••••" required />
+                <button type="button" onClick={()=>setShowPass(!showPass)} className="absolute left-3 top-1/2 -translate-y-1/2 text-gray-500 hover:text-gray-300">
+                  {showPass ? "🙈" : "👁"}
+                </button>
+              </div>
+            </div>
+            <button type="submit" disabled={isLoading} className="shiny-btn w-full py-3.5 rounded-xl text-white font-semibold relative overflow-hidden disabled:opacity-50">
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                {isLoading ? <div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div> : "دخول"}
+              </span>
+            </button>
+          </form>
+          <p className="mt-6 text-center text-gray-500 text-sm">
+            ليس لديك حساب؟ <button onClick={()=>{setError(null);onNavigate("register");}} className="text-gray-300 hover:text-white font-medium">سجل الآن</button>
+          </p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== REGISTER =====================
+function RegisterScreen({ onNavigate }) {
+  const [step, setStep] = useState(1);
+  const [role, setRole] = useState("");
+  const [location, setLocation] = useState("");
+  const [name, setName] = useState("");
+  const [username, setUsername] = useState("");
+  const [phone, setPhone] = useState("");
+  const [email, setEmail] = useState("");
+  const [password, setPassword] = useState("");
+  const [confirmPass, setConfirmPass] = useState("");
+  const [isLoading, setIsLoading] = useState(false);
+  const [shops, setShops] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const { register, error, setError, db, fb } = useAuth();
+
+  useEffect(() => { if (db && fb) loadLocations(); }, [db, fb]);
+
+  const loadLocations = async () => {
+    try {
+      await seedDefaultData(db, fb);
+      const [ss, ws] = await Promise.all([fb.getDocs(fb.collection(db,"shops")), fb.getDocs(fb.collection(db,"warehouses"))]);
+      setShops(ss.docs.map(d=>({id:d.id,...d.data()})));
+      setWarehouses(ws.docs.map(d=>({id:d.id,...d.data()})));
+    } catch(e) {}
+  };
+
+  const handleNext = () => {
+    if (step===1 && !role) return;
+    if (step===2 && !location) return;
+    if (step===3) {
+      if (!name||!username||!phone||!email||!password) return;
+      if (password !== confirmPass) { setError("كلمتا المرور غير متطابقتين"); return; }
+      if (password.length < 6) { setError("كلمة المرور يجب أن تكون 6 أحرف على الأقل"); return; }
+      handleRegister(); return;
+    }
+    setError(null); setStep(step+1);
+  };
+
+  const handleRegister = async () => {
+    setIsLoading(true);
+    try {
+      await register(email, password, { name, username, phone, role, shopId: role==="shop_worker"?location:null, warehouseId: role==="warehouse"?location:null });
+    } catch(e) {}
+    setIsLoading(false);
+  };
+
+  const locs = role==="shop_worker" ? shops : warehouses;
+
+  return (
+    <div className="min-h-screen flex items-center justify-center px-4 fade-in py-8">
+      <div className="w-full max-w-lg">
+        <button onClick={()=>{setError(null);onNavigate("main");}} className="mb-6 text-gray-500 hover:text-gray-300 flex items-center gap-2 transition-colors">
+          <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 8l4 4m0 0l-4 4m4-4H3" /></svg>رجوع
+        </button>
+        <div className="glass rounded-2xl p-8 shadow-2xl">
+          <div className="text-center mb-8">
+            <h2 className="text-3xl font-bold mb-2">إنشاء حساب</h2>
+            <p className="text-gray-400">خطوة {step} من 3</p>
+            <div className="flex gap-2 mt-4 justify-center">
+              {[1,2,3].map(i=><div key={i} className={`h-1.5 rounded-full transition-all duration-500 ${i<=step?'w-8 bg-gray-400':'w-8 bg-gray-800'}`}></div>)}
+            </div>
+          </div>
+          {error && <div className="mb-4 p-3 rounded-lg bg-red-900/30 border border-red-800/50 text-red-300 text-sm">{error}</div>}
+          {step===1 && (
+            <div className="slide-up space-y-3">
+              <p className="text-gray-400 text-sm mb-4 text-center">اختر نوع حسابك</p>
+              {[{id:"warehouse",label:"📦 مسؤول مخزن",desc:"إدارة المخزون والطلبيات الواردة"},{id:"shop_worker",label:"🏪 عامل محل",desc:"إنشاء طلبيات وعرض الكتالوج"}].map(r=>(
+                <button key={r.id} onClick={()=>setRole(r.id)} className={`w-full p-4 rounded-xl border text-right transition-all flex items-center gap-4 ${role===r.id?'border-gray-400 bg-gray-800/50':'border-gray-800 bg-gray-900/30 hover:border-gray-700'}`}>
+                  <div className="flex-1"><p className="font-semibold">{r.label}</p><p className="text-gray-500 text-sm">{r.desc}</p></div>
+                  <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${role===r.id?'border-gray-400 bg-gray-400':'border-gray-700'}`}>{role===r.id&&<div className="w-2 h-2 rounded-full bg-black"></div>}</div>
+                </button>
+              ))}
+            </div>
+          )}
+          {step===2 && (
+            <div className="slide-up space-y-3">
+              <p className="text-gray-400 text-sm mb-4 text-center">{role==="shop_worker"?"اختر محلك":"اختر المخزن التابع لك"}</p>
+              {locs.length===0 ? <p className="text-gray-500 text-center py-8">لا توجد {role==="shop_worker"?"محلات":"مخازن"} — تواصل مع المدير</p> :
+                locs.map(l=>(
+                  <button key={l.id} onClick={()=>setLocation(l.id)} className={`w-full p-4 rounded-xl border text-right transition-all flex items-center gap-4 ${location===l.id?'border-gray-400 bg-gray-800/50':'border-gray-800 bg-gray-900/30 hover:border-gray-700'}`}>
+                    <div className="flex-1"><p className="font-semibold">{l.name}</p><p className="text-gray-500 text-sm">{l.location}</p></div>
+                    <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center ${location===l.id?'border-gray-400 bg-gray-400':'border-gray-700'}`}>{location===l.id&&<div className="w-2 h-2 rounded-full bg-black"></div>}</div>
+                  </button>
+                ))
+              }
+            </div>
+          )}
+          {step===3 && (
+            <div className="slide-up space-y-4">
+              {[["الاسم الكامل","text",name,setName,"محمد أحمد"],["اسم المستخدم","text",username,setUsername,"mohamed_ahmed"],["رقم الهاتف","tel",phone,setPhone,"05XX XX XX XX"],["البريد الإلكتروني","email",email,setEmail,"example@email.com"]].map(([l,t,v,s,p])=>(
+                <div key={l}><label className="block text-sm text-gray-400 mb-2">{l}</label><input type={t} value={v} onChange={e=>s(e.target.value)} className="inp" placeholder={p} required /></div>
+              ))}
+              <div><label className="block text-sm text-gray-400 mb-2">كلمة المرور</label><input type="password" value={password} onChange={e=>setPassword(e.target.value)} className="inp" placeholder="6 أحرف على الأقل" required /></div>
+              <div><label className="block text-sm text-gray-400 mb-2">تأكيد كلمة المرور</label><input type="password" value={confirmPass} onChange={e=>setConfirmPass(e.target.value)} className="inp" placeholder="••••••••" required /></div>
+            </div>
+          )}
+          <div className="flex gap-3 mt-8">
+            {step>1 && <button onClick={()=>{setError(null);setStep(step-1);}} className="flex-1 py-3.5 rounded-xl border border-gray-700 text-gray-300 font-semibold hover:bg-gray-800 transition-all">السابق</button>}
+            <button onClick={handleNext} disabled={isLoading||(step===2&&locs.length===0)} className="shiny-btn flex-1 py-3.5 rounded-xl text-white font-semibold relative overflow-hidden disabled:opacity-50">
+              <span className="relative z-10 flex items-center justify-center gap-2">
+                {isLoading?<div className="w-5 h-5 border-2 border-white/30 border-t-white rounded-full animate-spin"></div>:(step===3?"إنشاء الحساب":"التالي")}
+              </span>
+            </button>
+          </div>
+          <p className="mt-6 text-center text-gray-500 text-sm">لديك حساب؟ <button onClick={()=>{setError(null);onNavigate("login");}} className="text-gray-300 hover:text-white font-medium">سجل دخول</button></p>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== DASHBOARD =====================
+function Dashboard({ onNavigate }) {
+  const { userData, logout, db, fb } = useAuth();
+  const [activeTab, setActiveTab] = useState("home");
+  const [unread, setUnread] = useState(0);
+
+  useEffect(() => {
+    if (!db||!fb||!userData) return;
+    const q = fb.query(fb.collection(db,"notifications"), fb.where("userId","==",userData.uid), fb.where("read","==",false));
+    const unsub = fb.onSnapshot(q, snap=>setUnread(snap.size));
+    return ()=>unsub();
+  }, [db,fb,userData]);
+
+  const isWH = userData?.role==="warehouse";
+  const isSH = userData?.role==="shop_worker";
+
+  const tabs = [
+    {id:"home",icon:"🏠",label:"الرئيسية"},
+    {id:"catalog",icon:"📰",label:"الكتالوج"},
+    {id:"orders",icon:"🧾",label:"الطلبيات"},
+    {id:"colors",icon:"🎨",label:"الألوان"},
+    ...(isWH?[{id:"history",icon:"📊",label:"السجل"},{id:"team",icon:"👥",label:"فريقي"}]:[]),
+    {id:"members",icon:"👤",label:"الأعضاء"},
+    {id:"notifications",icon:"🔔",label:`الإشعارات${unread>0?` (${unread})`:''}` }
+  ];
+
+  return (
+    <div className="min-h-screen pb-20 md:pb-0" style={{background:'#0a0a0a'}}>
+      <header className="glass sticky top-0 z-50 border-b border-gray-800">
+        <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
+          <div className="flex items-center gap-3">
+            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
+              <span className="text-lg font-bold text-gray-300">F</span>
+            </div>
+            <div>
+              <h1 className="font-bold text-lg">Fantex</h1>
+              <p className="text-xs text-gray-500">{userData?.name} | {isWH?"📦 مخزن":"🏪 محل"}</p>
+            </div>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={()=>setActiveTab("notifications")} className="relative p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-all">
+              🔔
+              {unread>0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full notification-dot"></span>}
+            </button>
+            <button onClick={logout} className="p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-red-400 transition-all">
+              <svg className="w-5 h-5" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 16l4-4m0 0l-4-4m4 4H7m6 4v1a3 3 0 01-3 3H6a3 3 0 01-3-3V7a3 3 0 013-3h4a3 3 0 013 3v1" /></svg>
+            </button>
+          </div>
+        </div>
+      </header>
+
+      <div className="max-w-7xl mx-auto px-4 py-6 flex gap-6">
+        <aside className="hidden md:block w-56 flex-shrink-0">
+          <div className="glass rounded-2xl p-3 space-y-1 sticky top-24">
+            {tabs.map(t=>(
+              <button key={t.id} onClick={()=>setActiveTab(t.id)} className={`w-full flex items-center gap-3 px-4 py-3 rounded-xl text-right transition-all duration-200 ${activeTab===t.id?'bg-gray-800 text-white shadow-lg':'text-gray-400 hover:bg-gray-900 hover:text-gray-200'}`}>
+                <span className="text-base">{t.icon}</span><span className="font-medium text-sm">{t.label}</span>
+              </button>
+            ))}
+          </div>
+        </aside>
+
+        <main className="flex-1 min-w-0">
+          {activeTab==="home" && <HomeTab userData={userData} db={db} fb={fb} />}
+          {activeTab==="catalog" && <CatalogTab userData={userData} db={db} fb={fb} />}
+          {activeTab==="orders" && <OrdersTab userData={userData} db={db} fb={fb} />}
+          {activeTab==="colors" && <ColorsTab userData={userData} db={db} fb={fb} />}
+          {activeTab==="history" && isWH && <HistoryTab db={db} fb={fb} />}
+          {activeTab==="team" && isWH && <TeamTab userData={userData} db={db} fb={fb} />}
+          {activeTab==="members" && <MembersTab userData={userData} db={db} fb={fb} />}
+          {activeTab==="notifications" && <NotificationsTab userData={userData} db={db} fb={fb} />}
+        </main>
+      </div>
+
+      {/* Mobile bottom nav */}
+      <nav className="md:hidden fixed bottom-0 left-0 right-0 glass border-t border-gray-800 z-50">
+        <div className="flex justify-around py-2 overflow-x-auto scrollbar-hide">
+          {tabs.slice(0,6).map(t=>(
+            <button key={t.id} onClick={()=>setActiveTab(t.id)} className={`flex flex-col items-center gap-1 min-w-[52px] px-1 ${activeTab===t.id?'text-white':'text-gray-500'}`}>
+              <span className="text-xl">{t.icon}</span>
+              <span className="text-xs leading-tight text-center" style={{fontSize:'10px'}}>{t.label.split(' ')[0]}</span>
+            </button>
+          ))}
+        </div>
+      </nav>
+    </div>
+  );
+}
+
+// ===================== HOME TAB =====================
+function HomeTab({ userData, db, fb }) {
+  const [stats, setStats] = useState({ fabrics:0, myOrders:0, pending:0, shipped:0 });
+  const [recent, setRecent] = useState([]);
+
+  useEffect(() => {
+    if (!db||!fb||!userData) return;
+    const isWH = userData.role==="warehouse";
+    let q;
+    if (isWH) q = fb.query(fb.collection(db,"orders"), fb.where("warehouseId","==",userData.warehouseId), fb.orderBy("createdAt","desc"));
+    else q = fb.query(fb.collection(db,"orders"), fb.where("shopId","==",userData.shopId), fb.orderBy("createdAt","desc"));
+    const unsub = fb.onSnapshot(q, snap=>{
+      const all = snap.docs.map(d=>({id:d.id,...d.data()}));
+      setStats({ fabrics:0, myOrders:all.length, pending:all.filter(o=>o.status==="pending").length, shipped:all.filter(o=>o.status==="shipped").length });
+      setRecent(all.slice(0,5));
+    });
+    const unsubF = fb.onSnapshot(fb.collection(db,"fabrics"), snap=>setStats(s=>({...s,fabrics:snap.size})));
+    return ()=>{ unsub(); unsubF(); };
+  }, [db,fb,userData]);
+
+  const isWH = userData?.role==="warehouse";
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="glass rounded-2xl p-6">
+        <h2 className="text-2xl font-bold mb-1">أهلاً، {userData?.name} 👋</h2>
+        <p className="text-gray-400">{isWH ? `📦 ${userData?.warehouseId||"المخزن"}` : `🏪 ${userData?.shopId||"المحل"}`}</p>
+      </div>
+      <div className="grid grid-cols-2 gap-4">
+        {[{label:"الأقمشة",v:stats.fabrics,icon:"📦"},{label:"طلبياتي",v:stats.myOrders,icon:"🧾"},{label:"قيد الانتظار",v:stats.pending,icon:"⏳"},{label:"تم الإرسال",v:stats.shipped,icon:"🚚"}].map((s,i)=>(
+          <div key={i} className="glass rounded-2xl p-5 card-hover">
+            <div className="text-2xl mb-2">{s.icon}</div>
+            <p className="text-3xl font-bold">{s.v}</p>
+            <p className="text-gray-400 text-sm mt-1">{s.label}</p>
+          </div>
+        ))}
+      </div>
+      <div className="glass rounded-2xl p-6">
+        <h3 className="font-bold text-lg mb-4">آخر الطلبيات</h3>
+        {recent.length===0 ? <p className="text-gray-500 text-center py-8">لا توجد طلبيات</p> :
+          <div className="space-y-3">
+            {recent.map(o=>(
+              <div key={o.id} className="flex items-center justify-between p-4 rounded-xl bg-gray-900/50 border border-gray-800">
+                <div>
+                  <p className="font-semibold">#{o.receiptNumber||o.id?.slice(-4)}</p>
+                  <p className="text-gray-500 text-sm">{statusLabel(o.status)}</p>
+                </div>
+                <p className="font-bold text-gray-300">{o.total?.toLocaleString()} د.ج</p>
+              </div>
+            ))}
+          </div>
+        }
+      </div>
+    </div>
+  );
+}
+
+// ===================== CATALOG TAB (Instagram-style posts) =====================
+function CatalogTab({ userData, db, fb }) {
+  const [fabrics, setFabrics] = useState([]);
+  const [colors, setColors] = useState([]);
+  const [users, setUsers] = useState({});
+  const [search, setSearch] = useState("");
+  const [loading, setLoading] = useState(true);
+  const [showAdd, setShowAdd] = useState(false);
+  const [newFab, setNewFab] = useState({ name:"", category:"", price:"", meters:"", imageFile:null, imagePreview:"", selectedColors:[] });
+  const [uploading, setUploading] = useState(false);
+  const isWH = userData?.role==="warehouse";
+
+  useEffect(() => {
+    if (!db||!fb) return;
+    const u1 = fb.onSnapshot(fb.query(fb.collection(db,"fabrics"), fb.orderBy("createdAt","desc")), snap=>{
+      setFabrics(snap.docs.map(d=>({id:d.id,...d.data()})));
+      setLoading(false);
+    });
+    const u2 = fb.onSnapshot(fb.collection(db,"colors"), snap=>setColors(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    const u3 = fb.onSnapshot(fb.collection(db,"users"), snap=>{
+      const m = {};
+      snap.docs.forEach(d=>{ m[d.id]=d.data(); });
+      setUsers(m);
+    });
+    return ()=>{ u1();u2();u3(); };
+  }, [db,fb]);
+
+  const filtered = fabrics.filter(f=>f.name?.toLowerCase().includes(search.toLowerCase())||f.category?.toLowerCase().includes(search.toLowerCase()));
+
+  const handleImageChange = (e) => {
+    const file = e.target.files[0];
+    if (!file) return;
+    setNewFab(n=>({...n, imageFile:file, imagePreview:URL.createObjectURL(file)}));
+  };
+
+  const handleAdd = async () => {
+    if (!newFab.name||!newFab.price||newFab.selectedColors.length===0) { alert("يرجى ملء اسم القماش والسعر واختيار لون واحد على الأقل"); return; }
+    setUploading(true);
+    let imageUrl = "";
+    if (newFab.imageFile) {
+      imageUrl = await uploadToCloudinary(newFab.imageFile);
+      if (!imageUrl) { alert("فشل رفع الصورة، تحقق من إعدادات Cloudinary"); setUploading(false); return; }
+    }
+    const colorsData = newFab.selectedColors.map(cid=>{ const c=colors.find(x=>x.id===cid); return {name:c.name,hex:c.hex}; });
+    try {
+      await fb.addDoc(fb.collection(db,"fabrics"), {
+        name:newFab.name, category:newFab.category, price:Number(newFab.price),
+        meters:newFab.meters, imageUrl, colors:colorsData,
+        publisherId: userData.uid, publisherName: userData.name,
+        publisherRole: userData.role, warehouseId: userData.warehouseId||null,
+        createdAt:fb.serverTimestamp()
+      });
+      await notifyAllShopWorkers(db, fb, `🆕 قماش جديد: ${newFab.name}`, `تم إضافة ${newFab.name} للكتالوج بسعر ${newFab.price} د.ج`);
+      setShowAdd(false);
+      setNewFab({name:"",category:"",price:"",meters:"",imageFile:null,imagePreview:"",selectedColors:[]});
+    } catch(e) { alert("خطأ في الإضافة"); }
+    setUploading(false);
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("هل أنت متأكد من الحذف؟")) return;
+    try { await fb.deleteDoc(fb.doc(db,"fabrics",id)); } catch(e) {}
+  };
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <h2 className="text-2xl font-bold">📰 الكتالوج</h2>
+        {isWH && (
+          <button onClick={()=>setShowAdd(!showAdd)} className="shiny-btn px-6 py-2.5 rounded-xl text-white font-medium relative overflow-hidden text-sm">
+            <span className="relative z-10">+ نشر سلعة جديدة</span>
+          </button>
+        )}
+      </div>
+      <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ابحث..." className="w-full inp" />
+
+      {showAdd && isWH && (
+        <div className="glass rounded-2xl p-6 space-y-4 slide-up">
+          <h3 className="font-bold text-yellow-400">📤 نشر سلعة جديدة</h3>
+          <div className="grid md:grid-cols-2 gap-4">
+            <div><label className="text-sm text-gray-400 block mb-1">اسم القماش *</label><input value={newFab.name} onChange={e=>setNewFab(n=>({...n,name:e.target.value}))} className="inp" placeholder="مثال: كراش فاخر" /></div>
+            <div><label className="text-sm text-gray-400 block mb-1">الفئة</label><input value={newFab.category} onChange={e=>setNewFab(n=>({...n,category:e.target.value}))} className="inp" placeholder="مثال: قطن، صوف..." /></div>
+            <div><label className="text-sm text-gray-400 block mb-1">السعر (د.ج) *</label><input type="number" value={newFab.price} onChange={e=>setNewFab(n=>({...n,price:e.target.value}))} className="inp" placeholder="0" /></div>
+            <div><label className="text-sm text-gray-400 block mb-1">الأمتار المتوفرة</label><input value={newFab.meters} onChange={e=>setNewFab(n=>({...n,meters:e.target.value}))} className="inp" placeholder="مثال: 500 متر" /></div>
+          </div>
+          <div>
+            <label className="text-sm text-gray-400 block mb-2">📸 صورة السلعة</label>
+            <input type="file" accept="image/*" onChange={handleImageChange} className="w-full text-sm text-gray-400 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-gray-800 file:text-gray-300 hover:file:bg-gray-700 cursor-pointer" />
+            {newFab.imagePreview && <img src={newFab.imagePreview} className="mt-3 h-40 rounded-xl object-cover border border-gray-700" alt="معاينة" />}
+          </div>
+          <div>
+            <p className="text-sm text-gray-400 mb-3">🎨 الألوان المتوفرة * (اختر واحداً على الأقل)</p>
+            <div className="flex flex-wrap gap-2">
+              {colors.map(c=>(
+                <button key={c.id} onClick={()=>{ const s=newFab.selectedColors.includes(c.id)?newFab.selectedColors.filter(x=>x!==c.id):[...newFab.selectedColors,c.id]; setNewFab(n=>({...n,selectedColors:s})); }} className={`flex items-center gap-2 px-3 py-2 rounded-xl border text-sm transition-all ${newFab.selectedColors.includes(c.id)?'border-gray-400 bg-gray-800/60':'border-gray-800 bg-gray-900/30 hover:border-gray-700'}`}>
+                  <div className="w-4 h-4 rounded-full border border-gray-600" style={{backgroundColor:c.hex}}></div>
+                  <span>{c.name}</span>
+                </button>
+              ))}
+              {colors.length===0 && <p className="text-gray-600 text-sm">لا توجد ألوان — أضف من تبويب الألوان أولاً</p>}
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={()=>setShowAdd(false)} className="flex-1 py-3 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800 transition-all">إلغاء</button>
+            <button onClick={handleAdd} disabled={uploading} className="shiny-btn flex-1 py-3 rounded-xl text-white font-semibold relative overflow-hidden disabled:opacity-50">
+              <span className="relative z-10">{uploading?"⏳ جاري النشر...":"📤 نشر"}</span>
+            </button>
+          </div>
+        </div>
+      )}
+
+      {loading ? (
+        <div className="flex items-center justify-center h-48"><div className="w-10 h-10 border-4 border-gray-800 border-t-gray-400 rounded-full animate-spin"></div></div>
+      ) : (
+        <div className="space-y-6">
+          {filtered.map(f => {
+            const publisher = users[f.publisherId];
+            return (
+              <div key={f.id} className="post-card fade-in">
+                {/* Post header - Instagram style */}
+                <div className="flex items-center justify-between p-4 pb-3">
+                  <div className="flex items-center gap-3">
+                    <div className="w-10 h-10 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center text-sm font-bold border border-gray-700">
+                      {(f.publisherName||"؟").charAt(0)}
+                    </div>
+                    <div>
+                      <p className="font-semibold text-sm">{f.publisherName||"مخزن"}</p>
+                      <p className="text-gray-500 text-xs">{f.warehouseId||"مخزن"} • {formatDate(f.createdAt)}</p>
+                    </div>
+                  </div>
+                  <div className="flex items-center gap-2">
+                    {isNewItem(f.createdAt) && <span className="new-badge px-2 py-0.5 rounded-full bg-green-900/40 text-green-400 text-xs border border-green-800/50">جديد</span>}
+                    {isWH && userData?.uid===f.publisherId && (
+                      <button onClick={()=>handleDelete(f.id)} className="text-red-400 hover:text-red-300 p-1 transition-colors">
+                        <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24"><path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M19 7l-.867 12.142A2 2 0 0116.138 21H7.862a2 2 0 01-1.995-1.858L5 7m5 4v6m4-6v6m1-10V4a1 1 0 00-1-1h-4a1 1 0 00-1 1v3M4 7h16" /></svg>
+                      </button>
+                    )}
+                  </div>
+                </div>
+                {/* Post image */}
+                {f.imageUrl && (
+                  <div className="w-full bg-gray-900/50 overflow-hidden" style={{maxHeight:'400px'}}>
+                    <img src={f.imageUrl} alt={f.name} className="w-full object-contain" style={{maxHeight:'400px'}} onError={e=>e.target.style.display='none'} />
+                  </div>
+                )}
+                {/* Post content */}
+                <div className="p-4 space-y-3">
+                  <div className="flex items-start justify-between">
+                    <div>
+                      <h3 className="font-bold text-lg">{f.name}</h3>
+                      {f.category && <p className="text-gray-500 text-sm">{f.category}</p>}
+                    </div>
+                    <div className="text-left">
+                      <p className="text-xl font-bold text-gray-200">{f.price?.toLocaleString()} د.ج</p>
+                      {f.meters && <p className="text-gray-500 text-xs">📏 {f.meters}</p>}
+                    </div>
+                  </div>
+                  {/* Colors */}
+                  <div className="flex flex-wrap gap-2">
+                    {f.colors?.map((c,i)=>(
+                      <div key={i} className="flex items-center gap-1.5 bg-gray-900/60 rounded-lg px-2.5 py-1.5 text-xs border border-gray-800">
+                        <div className="w-3.5 h-3.5 rounded-full border border-gray-600" style={{backgroundColor:c.hex}}></div>
+                        <span className="text-gray-300">{c.name}</span>
+                      </div>
+                    ))}
+                  </div>
+                </div>
+              </div>
+            );
+          })}
+          {filtered.length===0 && <p className="text-gray-500 text-center py-16">لا توجد سلع منشورة</p>}
+        </div>
+      )}
+    </div>
+  );
+}
+
+// ===================== COLORS TAB (ALL USERS CAN ADD) =====================
+function ColorsTab({ userData, db, fb }) {
+  const [colors, setColors] = useState([]);
+  const [newColor, setNewColor] = useState({name:"",hex:"#808080"});
+  const [showAdd, setShowAdd] = useState(false);
+
+  useEffect(() => {
+    if (!db||!fb) return;
+    const unsub = fb.onSnapshot(fb.collection(db,"colors"), snap=>setColors(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return ()=>unsub();
+  }, [db,fb]);
+
+  const handleAdd = async () => {
+    if (!newColor.name.trim()) return;
+    try {
+      await fb.addDoc(fb.collection(db,"colors"), { ...newColor, addedBy:userData?.name||"", createdAt:fb.serverTimestamp() });
+      setNewColor({name:"",hex:"#808080"});
+      setShowAdd(false);
+    } catch(e) { alert("خطأ"); }
+  };
+
+  const handleDelete = async (id) => {
+    if (!confirm("حذف هذا اللون؟")) return;
+    try { await fb.deleteDoc(fb.doc(db,"colors",id)); } catch(e) {}
+  };
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">🎨 الألوان</h2>
+        <button onClick={()=>setShowAdd(!showAdd)} className="shiny-btn px-5 py-2.5 rounded-xl text-white font-medium relative overflow-hidden text-sm">
+          <span className="relative z-10">+ لون جديد</span>
+        </button>
+      </div>
+      <p className="text-gray-500 text-sm">يمكن لجميع الحسابات إضافة ألوان جديدة. الألوان المضافة تظهر للجميع.</p>
+      {showAdd && (
+        <div className="glass rounded-2xl p-5 slide-up space-y-4">
+          <div className="flex gap-4 items-end">
+            <div className="flex-1"><label className="text-sm text-gray-400 block mb-2">اسم اللون</label><input value={newColor.name} onChange={e=>setNewColor(n=>({...n,name:e.target.value}))} className="inp" placeholder="مثال: بيج فاتح، أزرق نيلي..." /></div>
+            <div><label className="text-sm text-gray-400 block mb-2">اختر اللون</label><input type="color" value={newColor.hex} onChange={e=>setNewColor(n=>({...n,hex:e.target.value}))} className="w-16 h-12 rounded-xl bg-transparent cursor-pointer border border-gray-700 p-1" /></div>
+          </div>
+          <div className="flex items-center gap-3 p-3 rounded-xl bg-gray-900/50 border border-gray-800">
+            <div className="w-10 h-10 rounded-full border border-gray-600" style={{backgroundColor:newColor.hex}}></div>
+            <div>
+              <p className="font-medium text-sm">{newColor.name||"اسم اللون"}</p>
+              <p className="text-gray-500 text-xs">{newColor.hex}</p>
+            </div>
+          </div>
+          <div className="flex gap-3">
+            <button onClick={()=>setShowAdd(false)} className="flex-1 py-2.5 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800 transition-all">إلغاء</button>
+            <button onClick={handleAdd} className="shiny-btn flex-1 py-2.5 rounded-xl text-white font-semibold relative overflow-hidden"><span className="relative z-10">حفظ</span></button>
+          </div>
+        </div>
+      )}
+      <div className="grid grid-cols-2 md:grid-cols-4 lg:grid-cols-5 gap-3">
+        {colors.map(c=>(
+          <div key={c.id} className="glass rounded-xl p-4 text-center card-hover relative group">
+            <div className="w-14 h-14 rounded-full mx-auto mb-2 border-2 border-gray-700 shadow-lg" style={{backgroundColor:c.hex}}></div>
+            <p className="font-medium text-sm">{c.name}</p>
+            <p className="text-gray-500 text-xs">{c.hex}</p>
+            {c.addedBy && <p className="text-gray-600 text-xs mt-1">بواسطة: {c.addedBy}</p>}
+            <button onClick={()=>handleDelete(c.id)} className="absolute top-2 right-2 opacity-0 group-hover:opacity-100 text-red-400 hover:text-red-300 transition-all">✕</button>
+          </div>
+        ))}
+        {colors.length===0 && <p className="text-gray-500 col-span-full text-center py-12">لا توجد ألوان مسجلة بعد</p>}
+      </div>
+    </div>
+  );
+}
+
+// ===================== SHIP MODAL (for warehouse) =====================
+function ShipModal({ order, warehouseMembers, onClose, onConfirm }) {
+  const [preparedBy, setPreparedBy] = useState("");
+  const [preparedByCustom, setPreparedByCustom] = useState("");
+  const [sentBy, setSentBy] = useState("");
+  const [sentByCustom, setSentByCustom] = useState("");
+  const [driver, setDriver] = useState("");
+  const [driverCustom, setDriverCustom] = useState("");
+  const [bonFile, setBonFile] = useState(null);
+  const [uploading, setUploading] = useState(false);
+
+  const allFilled = (preparedBy==="other"?preparedByCustom.trim():preparedBy) && (sentBy==="other"?sentByCustom.trim():sentBy) && (driver==="other"?driverCustom.trim():driver) && bonFile;
+
+  const handleConfirm = async () => {
+    if (!allFilled) return;
+    setUploading(true);
+    const bonUrl = await uploadToCloudinary(bonFile);
+    if (!bonUrl) { alert("فشل رفع البون، تحقق من إعدادات Cloudinary"); setUploading(false); return; }
+    await onConfirm({
+      preparedBy: preparedBy==="other"?preparedByCustom:preparedBy,
+      sentBy: sentBy==="other"?sentByCustom:sentBy,
+      driver: driver==="other"?driverCustom:driver,
+      bonUrl
+    });
+    setUploading(false);
+  };
+
+  const SelectField = ({label, icon, value, onChange, options, custom, setCustom}) => (
+    <div>
+      <label className="text-sm text-gray-400 block mb-2">{icon} {label} *</label>
+      <select value={value} onChange={e=>onChange(e.target.value)} className="inp mb-2">
+        <option value="">— اختر —</option>
+        {options.map(o=><option key={o} value={o}>{o}</option>)}
+        <option value="other">آخر (اكتب يدوياً)</option>
+      </select>
+      {value==="other" && <input value={custom} onChange={e=>setCustom(e.target.value)} className="inp" placeholder={`اكتب ${label}...`} />}
+    </div>
+  );
+
+  return (
+    <div className="modal-overlay" onClick={e=>{ if(e.target===e.currentTarget) onClose(); }}>
+      <div className="modal-box">
+        <div className="flex items-center justify-between mb-6">
+          <h3 className="text-lg font-bold">🚚 إرسال الطلبية #{order.receiptNumber||order.id?.slice(-4)}</h3>
+          <button onClick={onClose} className="text-gray-500 hover:text-white text-xl">✕</button>
+        </div>
+        <div className="space-y-5">
+          <SelectField label="من جهّز الطلبية" icon="🔧" value={preparedBy} onChange={setPreparedBy} options={warehouseMembers.map(m=>m.name)} custom={preparedByCustom} setCustom={setPreparedByCustom} />
+          <SelectField label="من قام بالإرسال" icon="📬" value={sentBy} onChange={setSentBy} options={warehouseMembers.map(m=>m.name)} custom={sentByCustom} setCustom={setSentByCustom} />
+          <SelectField label="السائق" icon="🚗" value={driver} onChange={setDriver} options={DRIVERS} custom={driverCustom} setCustom={setDriverCustom} />
+          <div>
+            <label className="text-sm text-gray-400 block mb-2">🧾 البون الرقمي * <span className="text-red-400">(مطلوب)</span></label>
+            <input type="file" accept="image/*,application/pdf" onChange={e=>setBonFile(e.target.files[0])} className="w-full text-sm text-gray-400 file:py-2 file:px-4 file:rounded-xl file:border-0 file:bg-gray-800 file:text-gray-300 hover:file:bg-gray-700 cursor-pointer" />
+            {bonFile && <p className="text-green-400 text-sm mt-2">✅ {bonFile.name}</p>}
+          </div>
+          {!allFilled && <p className="text-yellow-500 text-sm">⚠️ يجب ملء جميع الحقول ورفع البون قبل التأكيد</p>}
+          <div className="flex gap-3 pt-2">
+            <button onClick={onClose} className="flex-1 py-3 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800 transition-all">إلغاء</button>
+            <button onClick={handleConfirm} disabled={!allFilled||uploading} className="shiny-btn flex-1 py-3 rounded-xl text-white font-semibold relative overflow-hidden disabled:opacity-50">
+              <span className="relative z-10">{uploading?"⏳ جاري الرفع...":"✅ تأكيد الإرسال"}</span>
+            </button>
+          </div>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== ORDERS TAB =====================
+function OrdersTab({ userData, db, fb }) {
+  const [orders, setOrders] = useState([]);
+  const [fabrics, setFabrics] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [shops, setShops] = useState([]);
+  const [warehouseMembers, setWarehouseMembers] = useState([]);
+  const [showNew, setShowNew] = useState(false);
+  const [cart, setCart] = useState([]);
+  const [selectedFabric, setSelectedFabric] = useState("");
+  const [selectedWarehouse, setSelectedWarehouse] = useState("");
+  const [quantities, setQuantities] = useState({});
+  const [filter, setFilter] = useState("all");
+  const [shipModal, setShipModal] = useState(null);
+
+  const isWH = userData?.role==="warehouse";
+  const isSH = userData?.role==="shop_worker";
+
+  useEffect(() => {
+    if (!db||!fb||!userData) return;
+    // Load orders for THIS user's scope
+    let q;
+    if (isWH) q = fb.query(fb.collection(db,"orders"), fb.where("warehouseId","==",userData.warehouseId), fb.orderBy("createdAt","desc"));
+    else q = fb.query(fb.collection(db,"orders"), fb.where("shopId","==",userData.shopId), fb.orderBy("createdAt","desc"));
+    const u1 = fb.onSnapshot(q, snap=>setOrders(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    const u2 = fb.onSnapshot(fb.collection(db,"fabrics"), snap=>setFabrics(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    const u3 = fb.onSnapshot(fb.collection(db,"warehouses"), snap=>setWarehouses(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    const u4 = fb.onSnapshot(fb.collection(db,"shops"), snap=>setShops(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return ()=>{ u1();u2();u3();u4(); };
+  }, [db,fb,userData]);
+
+  // Load warehouse members for ship modal
+  useEffect(() => {
+    if (!db||!fb||!isWH||!userData?.warehouseId) return;
+    const q = fb.query(fb.collection(db,"users"), fb.where("role","==","warehouse"), fb.where("warehouseId","==",userData.warehouseId));
+    const unsub = fb.onSnapshot(q, snap=>setWarehouseMembers(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return ()=>unsub();
+  }, [db,fb,userData,isWH]);
+
+  const filtered = filter==="all" ? orders : orders.filter(o=>o.status===filter);
+  const selectedFab = fabrics.find(f=>f.id===selectedFabric);
+
+  const addToCart = (colorName, colorHex) => {
+    if (!selectedFab) return;
+    const qty = quantities[colorName] || 1;
+    const idx = cart.findIndex(i=>i.fabricId===selectedFabric&&i.color===colorName);
+    if (idx>=0) { const c=[...cart]; c[idx].quantity+=qty; c[idx].total=c[idx].price*c[idx].quantity; setCart(c); }
+    else setCart([...cart, { fabricId:selectedFabric, fabricName:selectedFab.name, color:colorName, colorHex, quantity:qty, price:selectedFab.price, total:selectedFab.price*qty }]);
+  };
+
+  const submitOrder = async () => {
+    if (cart.length===0||!selectedWarehouse) { alert("يرجى اختيار المخزن وإضافة أصناف للطلبية"); return; }
+    const total = cart.reduce((s,i)=>s+i.total,0);
+    try {
+      const wh = warehouses.find(w=>w.id===selectedWarehouse);
+      await fb.addDoc(fb.collection(db,"orders"), {
+        shopId:userData?.shopId, warehouseId:selectedWarehouse,
+        workerId:userData?.uid, workerName:userData?.name,
+        items:cart, total, status:"pending",
+        receiptNumber:"REC-"+Date.now().toString().slice(-6),
+        createdAt:fb.serverTimestamp()
+      });
+      await notifyWarehouseTeam(db, fb, selectedWarehouse, `📦 طلبية جديدة من ${userData?.name}`, `محل: ${userData?.shopId} — إجمالي: ${total.toLocaleString()} د.ج`);
+      setCart([]); setSelectedFabric(""); setSelectedWarehouse(""); setQuantities({}); setShowNew(false);
+    } catch(e) { alert("خطأ في إنشاء الطلبية"); }
+  };
+
+  // Warehouse: accept order (pending → processing)
+  const acceptOrder = async (orderId) => {
+    try {
+      await fb.updateDoc(fb.doc(db,"orders",orderId), { status:"processing", acceptedBy:userData?.name, acceptedAt:fb.serverTimestamp() });
+      const o = orders.find(x=>x.id===orderId);
+      if (o) await notifyUser(db, fb, o.workerId, "✅ تم قبول طلبيتك", `طلبية #${o.receiptNumber||o.id?.slice(-4)} تم قبولها وجاري التجهيز`);
+    } catch(e) { alert("خطأ"); }
+  };
+
+  // Warehouse: open ship modal (processing → shipped)
+  const openShipModal = (order) => setShipModal(order);
+
+  const confirmShip = async (details) => {
+    if (!shipModal) return;
+    try {
+      await fb.updateDoc(fb.doc(db,"orders",shipModal.id), {
+        status:"shipped",
+        preparedBy:details.preparedBy,
+        sentBy:details.sentBy,
+        driver:details.driver,
+        bonUrl:details.bonUrl,
+        shippedAt:fb.serverTimestamp()
+      });
+      await notifyUser(db, fb, shipModal.workerId, "🚚 تم إرسال طلبيتك", `طلبية #${shipModal.receiptNumber||shipModal.id?.slice(-4)} في الطريق مع السائق ${details.driver}`);
+      setShipModal(null);
+    } catch(e) { alert("خطأ"); }
+  };
+
+  // Shop: confirm delivery (shipped → delivered)
+  const confirmDelivery = async (orderId) => {
+    try {
+      await fb.updateDoc(fb.doc(db,"orders",orderId), { status:"delivered", deliveredAt:fb.serverTimestamp() });
+    } catch(e) { alert("خطأ"); }
+  };
+
+  return (
+    <div className="space-y-6 fade-in">
+      {shipModal && <ShipModal order={shipModal} warehouseMembers={warehouseMembers} onClose={()=>setShipModal(null)} onConfirm={confirmShip} />}
+
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <h2 className="text-2xl font-bold">🧾 الطلبيات</h2>
+        {isSH && <button onClick={()=>setShowNew(!showNew)} className="shiny-btn px-6 py-2.5 rounded-xl text-white font-medium relative overflow-hidden text-sm"><span className="relative z-10">+ طلبية جديدة</span></button>}
+      </div>
+
+      {showNew && isSH && (
+        <div className="glass rounded-2xl p-6 space-y-5 slide-up">
+          <h3 className="font-bold">إنشاء طلبية جديدة</h3>
+          {/* Select warehouse */}
+          <div>
+            <label className="text-sm text-gray-400 block mb-2">📦 وجّه الطلبية إلى مخزن:</label>
+            <select value={selectedWarehouse} onChange={e=>setSelectedWarehouse(e.target.value)} className="inp">
+              <option value="">— اختر المخزن —</option>
+              {warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+            </select>
+          </div>
+          {/* Select fabric */}
+          <div>
+            <label className="text-sm text-gray-400 block mb-2">🧶 اختر القماش:</label>
+            <select value={selectedFabric} onChange={e=>{setSelectedFabric(e.target.value);setQuantities({});}} className="inp">
+              <option value="">— اختر القماش —</option>
+              {fabrics.map(f=><option key={f.id} value={f.id}>{f.name} — {f.price?.toLocaleString()} د.ج</option>)}
+            </select>
+          </div>
+          {/* Colors & quantities */}
+          {selectedFab && (
+            <div>
+              <p className="text-sm text-gray-400 mb-3">🎨 اختر الألوان والكميات:</p>
+              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                {selectedFab.colors?.map(c=>(
+                  <div key={c.name} className="bg-gray-900/50 rounded-xl p-3 border border-gray-800">
+                    <div className="flex items-center gap-2 mb-2">
+                      <div className="w-5 h-5 rounded-full border border-gray-700" style={{backgroundColor:c.hex}}></div>
+                      <span className="text-sm font-medium">{c.name}</span>
+                    </div>
+                    <div className="flex gap-2">
+                      <input type="number" min="1" defaultValue="1" onChange={e=>setQuantities(q=>({...q,[c.name]:Number(e.target.value)}))} className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-sm" />
+                      <button onClick={()=>addToCart(c.name,c.hex)} className="px-3 py-1 rounded-lg bg-gray-700 text-white text-sm hover:bg-gray-600 transition-all">+</button>
+                    </div>
+                  </div>
+                ))}
+              </div>
+            </div>
+          )}
+          {/* Cart */}
+          {cart.length>0 && (
+            <div className="space-y-2">
+              <p className="text-sm text-gray-400">عناصر الطلبية:</p>
+              {cart.map((item,i)=>(
+                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-gray-900/50 border border-gray-800">
+                  <div className="flex items-center gap-3">
+                    <div className="w-5 h-5 rounded-full border border-gray-700" style={{backgroundColor:item.colorHex}}></div>
+                    <span className="text-sm">{item.fabricName} — {item.color} × {item.quantity}</span>
+                  </div>
+                  <div className="flex items-center gap-3">
+                    <span className="font-semibold text-sm">{item.total?.toLocaleString()} د.ج</span>
+                    <button onClick={()=>setCart(cart.filter((_,j)=>j!==i))} className="text-red-400 text-sm hover:text-red-300">✕</button>
+                  </div>
+                </div>
+              ))}
+              <div className="flex justify-between items-center pt-3 border-t border-gray-800">
+                <p className="font-bold">الإجمالي: {cart.reduce((s,i)=>s+i.total,0).toLocaleString()} د.ج</p>
+                <button onClick={submitOrder} className="shiny-btn px-8 py-3 rounded-xl text-white font-semibold relative overflow-hidden"><span className="relative z-10">إرسال الطلبية</span></button>
+              </div>
+            </div>
+          )}
+        </div>
+      )}
+
+      {/* Filter tabs */}
+      <div className="flex gap-2 flex-wrap">
+        {[["all","الكل"],["pending","⏳ انتظار"],["processing","🔧 تجهيز"],["shipped","🚚 مُرسل"],["delivered","📦 مُسلَّم"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilter(v)} className={`px-4 py-2 rounded-lg text-sm transition-all ${filter===v?'bg-gray-700 border border-gray-600 text-white':'bg-gray-900 border border-gray-800 text-gray-400 hover:border-gray-700'}`}>{l}</button>
+        ))}
+      </div>
+
+      {/* Orders list */}
+      <div className="space-y-4">
+        {filtered.length===0 ? <p className="text-gray-500 text-center py-12">لا توجد طلبيات</p> :
+          filtered.map(o=>(
+            <div key={o.id} className="glass rounded-2xl p-5 card-hover">
+              <div className="flex items-start justify-between mb-3">
+                <div>
+                  <div className="flex items-center gap-3 flex-wrap">
+                    <h3 className="font-bold">طلبية #{o.receiptNumber||o.id?.slice(-4)}</h3>
+                    <span className={`px-3 py-1 rounded-full text-xs font-medium border ${statusColor(o.status)}`}>{statusLabel(o.status)}</span>
+                  </div>
+                  <p className="text-gray-500 text-sm mt-1">
+                    {o.workerName} | {shops.find(s=>s.id===o.shopId)?.name||o.shopId} → {warehouses.find(w=>w.id===o.warehouseId)?.name||o.warehouseId} | {formatDate(o.createdAt)}
+                  </p>
+                </div>
+                <p className="text-xl font-bold">{o.total?.toLocaleString()} د.ج</p>
+              </div>
+
+              {/* Items */}
+              <div className="flex flex-wrap gap-2 mb-3">
+                {o.items?.map((item,i)=>(
+                  <div key={i} className="flex items-center gap-2 bg-gray-900/50 rounded-lg px-3 py-1.5 text-xs">
+                    <div className="w-3 h-3 rounded-full border border-gray-700" style={{backgroundColor:item.colorHex}}></div>
+                    <span className="text-gray-300">{item.fabricName} — {item.color} × {item.quantity}</span>
+                  </div>
+                ))}
+              </div>
+
+              {/* Shipped details */}
+              {o.status==="shipped"||o.status==="delivered" ? (
+                <div className="bg-gray-900/50 rounded-xl p-4 mb-3 space-y-2 border border-gray-800">
+                  <p className="text-sm font-semibold text-gray-300 mb-3">📋 تفاصيل الشحنة:</p>
+                  <div className="grid grid-cols-2 gap-2 text-sm">
+                    {o.preparedBy && <div><span className="text-gray-500">🔧 جهّزها:</span> <span className="text-gray-200">{o.preparedBy}</span></div>}
+                    {o.sentBy && <div><span className="text-gray-500">📬 أرسلها:</span> <span className="text-gray-200">{o.sentBy}</span></div>}
+                    {o.driver && <div><span className="text-gray-500">🚗 السائق:</span> <span className="text-gray-200">{o.driver}</span></div>}
+                    {o.shippedAt && <div><span className="text-gray-500">📅 الإرسال:</span> <span className="text-gray-200">{formatDate(o.shippedAt)}</span></div>}
+                  </div>
+                  {o.bonUrl && (
+                    <div className="mt-2">
+                      <p className="text-gray-500 text-xs mb-1">🧾 البون:</p>
+                      <img src={o.bonUrl} alt="البون" className="max-h-40 rounded-xl border border-gray-700 cursor-pointer hover:opacity-80" onClick={()=>window.open(o.bonUrl,'_blank')} />
+                    </div>
+                  )}
+                </div>
+              ) : null}
+
+              {/* Warehouse actions */}
+              {isWH && (
+                <div className="flex flex-wrap gap-3">
+                  {o.status==="pending" && (
+                    <button onClick={()=>acceptOrder(o.id)} className="px-5 py-2 rounded-xl bg-blue-900/30 border border-blue-800/50 text-blue-400 text-sm hover:bg-blue-900/50 transition-all">
+                      ✅ قبول وبدء التجهيز
+                    </button>
+                  )}
+                  {o.status==="processing" && (
+                    <button onClick={()=>openShipModal(o)} className="px-5 py-2 rounded-xl bg-purple-900/30 border border-purple-800/50 text-purple-400 text-sm hover:bg-purple-900/50 transition-all">
+                      🚚 إرسال الطلبية
+                    </button>
+                  )}
+                  {o.status==="shipped" && <span className="text-purple-400 text-sm py-2">✓ تم الإرسال — بانتظار تأكيد المحل</span>}
+                  {o.status==="delivered" && <span className="text-green-400 text-sm py-2">✓ تم التسليم</span>}
+                </div>
+              )}
+
+              {/* Shop worker actions */}
+              {isSH && (
+                <div>
+                  {o.status==="pending" && <p className="text-yellow-500 text-sm">⏳ بانتظار قبول المخزن...</p>}
+                  {o.status==="processing" && <p className="text-blue-400 text-sm">🔧 جاري التجهيز في المخزن...</p>}
+                  {o.status==="shipped" && (
+                    <div className="flex items-center gap-4 flex-wrap">
+                      <p className="text-purple-400 text-sm">🚚 الطلبية في الطريق إليك!</p>
+                      <button onClick={()=>confirmDelivery(o.id)} className="px-5 py-2 rounded-xl bg-green-900/30 border border-green-800/50 text-green-400 text-sm hover:bg-green-900/50 transition-all">
+                        📦 تأكيد الاستلام
+                      </button>
+                    </div>
+                  )}
+                  {o.status==="delivered" && <p className="text-green-400 text-sm">✅ تم الاستلام بنجاح</p>}
+                </div>
+              )}
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
+// ===================== HISTORY TAB =====================
+function HistoryTab({ db, fb }) {
+  const [orders, setOrders] = useState([]);
+  const [shops, setShops] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [filterStatus, setFilterStatus] = useState("");
+  const [filterShop, setFilterShop] = useState("");
+  const [filterDate, setFilterDate] = useState("");
+
+  useEffect(() => {
+    if (!db||!fb) return;
+    const u1 = fb.onSnapshot(fb.query(fb.collection(db,"orders"), fb.orderBy("createdAt","desc")), snap=>setOrders(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    const u2 = fb.onSnapshot(fb.collection(db,"shops"), snap=>setShops(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    const u3 = fb.onSnapshot(fb.collection(db,"warehouses"), snap=>setWarehouses(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return ()=>{ u1();u2();u3(); };
+  }, [db,fb]);
+
+  const filtered = orders.filter(o => {
+    if (filterStatus && o.status!==filterStatus) return false;
+    if (filterShop && o.shopId!==filterShop) return false;
+    if (filterDate && o.createdAt) {
+      const d = o.createdAt.toDate?o.createdAt.toDate():new Date(o.createdAt);
+      if (d.toDateString() !== new Date(filterDate).toDateString()) return false;
+    }
+    return true;
+  });
+
+  return (
+    <div className="space-y-6 fade-in">
+      <h2 className="text-2xl font-bold">📊 سجل الطلبيات</h2>
+      <div className="glass rounded-2xl p-4 space-y-3">
+        <div className="grid md:grid-cols-3 gap-3">
+          <input type="date" value={filterDate} onChange={e=>setFilterDate(e.target.value)} className="inp text-sm" />
+          <select value={filterShop} onChange={e=>setFilterShop(e.target.value)} className="inp text-sm">
+            <option value="">جميع المحلات</option>
+            {shops.map(s=><option key={s.id} value={s.id}>{s.name}</option>)}
+          </select>
+          <select value={filterStatus} onChange={e=>setFilterStatus(e.target.value)} className="inp text-sm">
+            <option value="">جميع الحالات</option>
+            <option value="pending">⏳ انتظار</option>
+            <option value="processing">🔧 تجهيز</option>
+            <option value="shipped">🚚 مُرسل</option>
+            <option value="delivered">📦 مُسلَّم</option>
+          </select>
+        </div>
+        <button onClick={()=>{setFilterDate("");setFilterShop("");setFilterStatus("");}} className="px-4 py-2 rounded-lg bg-gray-800 text-gray-300 text-sm hover:bg-gray-700 transition-all">إعادة تعيين</button>
+      </div>
+      <div className="space-y-3">
+        {filtered.length===0 ? <p className="text-gray-500 text-center py-12">لا توجد نتائج</p> :
+          filtered.map(o=>(
+            <div key={o.id} className="glass rounded-2xl p-5">
+              <div className="flex items-start justify-between mb-2">
+                <div>
+                  <h3 className="font-bold">#{o.receiptNumber||o.id?.slice(-4)}</h3>
+                  <p className="text-gray-500 text-sm">{o.workerName} | {shops.find(s=>s.id===o.shopId)?.name||o.shopId} → {warehouses.find(w=>w.id===o.warehouseId)?.name||o.warehouseId}</p>
+                </div>
+                <span className={`px-3 py-1 rounded-full text-xs border ${statusColor(o.status)}`}>{statusLabel(o.status)}</span>
+              </div>
+              <p className="text-gray-400 text-sm">{formatDate(o.createdAt)}</p>
+              <p className="font-bold mt-2">{o.total?.toLocaleString()} د.ج</p>
+              {(o.status==="shipped"||o.status==="delivered") && (
+                <div className="mt-3 pt-3 border-t border-gray-800 grid grid-cols-3 gap-2 text-xs">
+                  {o.preparedBy && <div><span className="text-gray-500">🔧 </span><span className="text-gray-300">{o.preparedBy}</span></div>}
+                  {o.driver && <div><span className="text-gray-500">🚗 </span><span className="text-gray-300">{o.driver}</span></div>}
+                  {o.sentBy && <div><span className="text-gray-500">📬 </span><span className="text-gray-300">{o.sentBy}</span></div>}
+                </div>
+              )}
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
+// ===================== TEAM TAB =====================
+function TeamTab({ userData, db, fb }) {
+  const [members, setMembers] = useState([]);
+  const [whName, setWhName] = useState("");
+
+  useEffect(() => {
+    if (!db||!fb||!userData?.warehouseId) return;
+    fb.getDoc(fb.doc(db,"warehouses",userData.warehouseId)).then(s=>{ if(s.exists()) setWhName(s.data().name); });
+    const q = fb.query(fb.collection(db,"users"), fb.where("role","==","warehouse"), fb.where("warehouseId","==",userData.warehouseId));
+    const unsub = fb.onSnapshot(q, snap=>setMembers(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return ()=>unsub();
+  }, [db,fb,userData]);
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="glass rounded-2xl p-6">
+        <h2 className="text-2xl font-bold mb-1">👥 فريق العمل</h2>
+        <p className="text-gray-400">زملاؤك في {whName||"المخزن"} — {members.length} عضو</p>
+      </div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {members.map(m=>(
+          <div key={m.id} className={`glass rounded-2xl p-5 card-hover ${m.id===userData?.uid?'border-blue-500/30':''}`}>
+            <div className="flex items-center gap-4">
+              <div className="w-14 h-14 rounded-full bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center text-xl font-bold border border-gray-700">{m.name?.charAt(0)}</div>
+              <div className="flex-1">
+                <h3 className="font-bold">{m.name}</h3>
+                <p className="text-gray-400 text-sm">@{m.username}</p>
+                <p className="text-gray-500 text-xs">{m.phone}</p>
+              </div>
+              {m.id===userData?.uid && <span className="px-2 py-1 rounded-lg bg-blue-900/30 border border-blue-800/50 text-blue-400 text-xs">أنت</span>}
+            </div>
+            <div className="mt-4 pt-4 border-t border-gray-800">
+              <p className="text-gray-500 text-sm">📧 {m.email}</p>
+              <p className="text-gray-600 text-xs mt-1">انضم: {formatDate(m.createdAt)}</p>
+            </div>
+          </div>
+        ))}
+        {members.length===0 && <p className="text-gray-500 col-span-full text-center py-12">لا يوجد زملاء مسجلون بعد</p>}
+      </div>
+    </div>
+  );
+}
+
+// ===================== MEMBERS TAB (view all users) =====================
+function MembersTab({ userData, db, fb }) {
+  const [users, setUsers] = useState([]);
+  const [shops, setShops] = useState([]);
+  const [warehouses, setWarehouses] = useState([]);
+  const [selected, setSelected] = useState(null);
+  const [filterRole, setFilterRole] = useState("all");
+  const [search, setSearch] = useState("");
+
+  useEffect(() => {
+    if (!db||!fb) return;
+    const u1 = fb.onSnapshot(fb.collection(db,"users"), snap=>setUsers(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    const u2 = fb.onSnapshot(fb.collection(db,"shops"), snap=>setShops(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    const u3 = fb.onSnapshot(fb.collection(db,"warehouses"), snap=>setWarehouses(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return ()=>{ u1();u2();u3(); };
+  }, [db,fb]);
+
+  const filtered = users.filter(u => {
+    if (filterRole!=="all" && u.role!==filterRole) return false;
+    if (search && !u.name?.toLowerCase().includes(search.toLowerCase()) && !u.username?.toLowerCase().includes(search.toLowerCase())) return false;
+    if (u.role==="admin") return false;
+    return true;
+  });
+
+  const getLocation = (u) => {
+    if (u.role==="shop_worker") return shops.find(s=>s.id===u.shopId)?.name||u.shopId||"—";
+    if (u.role==="warehouse") return warehouses.find(w=>w.id===u.warehouseId)?.name||u.warehouseId||"—";
+    return "—";
+  };
+
+  return (
+    <div className="space-y-6 fade-in">
+      {selected && (
+        <div className="modal-overlay" onClick={e=>{if(e.target===e.currentTarget)setSelected(null);}}>
+          <div className="modal-box max-w-sm">
+            <div className="text-center mb-6">
+              <div className="w-20 h-20 rounded-full bg-gradient-to-br from-gray-600 to-gray-900 flex items-center justify-center text-3xl font-bold border-2 border-gray-700 mx-auto mb-3">{selected.name?.charAt(0)}</div>
+              <h3 className="text-xl font-bold">{selected.name}</h3>
+              <p className="text-gray-400">@{selected.username}</p>
+              <span className={`inline-block mt-2 px-3 py-1 rounded-full text-xs border ${selected.status==="blocked"?"text-red-400 border-red-800/50 bg-red-900/20":"text-green-400 border-green-800/50 bg-green-900/20"}`}>{selected.status==="blocked"?"محظور":"نشط"}</span>
+            </div>
+            <div className="space-y-3 text-sm">
+              {[["📧 البريد",selected.email],["📱 الهاتف",selected.phone],["👔 الدور",selected.role==="warehouse"?"مخزن":"محل"],["📍 الموقع",getLocation(selected)],["📅 الانضمام",formatDate(selected.createdAt)]].map(([l,v])=>(
+                <div key={l} className="flex justify-between p-3 rounded-lg bg-gray-900/50 border border-gray-800">
+                  <span className="text-gray-400">{l}</span><span className="text-gray-200">{v}</span>
+                </div>
+              ))}
+            </div>
+            <button onClick={()=>setSelected(null)} className="w-full mt-5 py-3 rounded-xl border border-gray-700 text-gray-300 hover:bg-gray-800 transition-all">إغلاق</button>
+          </div>
+        </div>
+      )}
+
+      <div className="flex items-center justify-between flex-wrap gap-4">
+        <h2 className="text-2xl font-bold">👤 الأعضاء</h2>
+        <span className="text-gray-500 text-sm">{filtered.length} عضو</span>
+      </div>
+      <div className="flex gap-3 flex-wrap">
+        <input value={search} onChange={e=>setSearch(e.target.value)} placeholder="ابحث بالاسم..." className="inp flex-1 min-w-[180px] text-sm" style={{padding:'10px 14px'}} />
+        {[["all","الكل"],["shop_worker","🏪 محلات"],["warehouse","📦 مخازن"]].map(([v,l])=>(
+          <button key={v} onClick={()=>setFilterRole(v)} className={`px-4 py-2 rounded-xl text-sm transition-all ${filterRole===v?'bg-gray-700 text-white':'bg-gray-900 border border-gray-800 text-gray-400 hover:border-gray-700'}`}>{l}</button>
+        ))}
+      </div>
+      <div className="grid md:grid-cols-2 lg:grid-cols-3 gap-4">
+        {filtered.map(u=>(
+          <button key={u.id} onClick={()=>setSelected(u)} className="glass rounded-2xl p-4 text-right card-hover w-full">
+            <div className="flex items-center gap-3">
+              <div className="w-12 h-12 rounded-full bg-gradient-to-br from-gray-600 to-gray-800 flex items-center justify-center text-lg font-bold border border-gray-700 flex-shrink-0">{u.name?.charAt(0)}</div>
+              <div className="flex-1 min-w-0">
+                <p className="font-semibold truncate">{u.name}</p>
+                <p className="text-gray-400 text-sm">@{u.username}</p>
+                <p className="text-gray-500 text-xs mt-1">{u.role==="warehouse"?"📦":"🏪"} {getLocation(u)}</p>
+              </div>
+              <span className={`w-2 h-2 rounded-full flex-shrink-0 ${u.status==="blocked"?"bg-red-500":"bg-green-500"}`}></span>
+            </div>
+          </button>
+        ))}
+        {filtered.length===0 && <p className="text-gray-500 col-span-full text-center py-12">لا توجد نتائج</p>}
+      </div>
+    </div>
+  );
+}
+
+// ===================== NOTIFICATIONS TAB =====================
+function NotificationsTab({ userData, db, fb }) {
+  const [notifications, setNotifications] = useState([]);
+
+  useEffect(() => {
+    if (!db||!fb||!userData) return;
+    const q = fb.query(fb.collection(db,"notifications"), fb.where("userId","==",userData.uid), fb.orderBy("createdAt","desc"));
+    const unsub = fb.onSnapshot(q, snap=>setNotifications(snap.docs.map(d=>({id:d.id,...d.data()}))));
+    return ()=>unsub();
+  }, [db,fb,userData]);
+
+  const markRead = async (id) => { try { await fb.updateDoc(fb.doc(db,"notifications",id),{read:true}); } catch(e){} };
+  const markAll = async () => { for (const n of notifications.filter(x=>!x.read)) await markRead(n.id); };
+
+  return (
+    <div className="space-y-6 fade-in">
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold">🔔 الإشعارات</h2>
+        {notifications.some(n=>!n.read) && <button onClick={markAll} className="text-sm text-gray-400 hover:text-white transition-colors">تعيين الكل مقروء</button>}
+      </div>
+      <div className="space-y-3">
+        {notifications.length===0 ? <p className="text-gray-500 text-center py-12">لا توجد إشعارات</p> :
+          notifications.map(n=>(
+            <div key={n.id} onClick={()=>markRead(n.id)} className={`glass rounded-2xl p-5 cursor-pointer transition-all ${!n.read?'border-l-4 border-l-yellow-500':''}`}>
+              <div className="flex items-start justify-between">
+                <div>
+                  <h3 className={`font-semibold ${!n.read?'text-white':'text-gray-400'}`}>{n.title}</h3>
+                  <p className="text-gray-500 text-sm mt-1">{n.body}</p>
+                  <p className="text-gray-600 text-xs mt-2">{formatDate(n.createdAt)}</p>
+                </div>
+                {!n.read && <div className="w-3 h-3 bg-yellow-500 rounded-full flex-shrink-0 mt-1"></div>}
+              </div>
+            </div>
+          ))
+        }
+      </div>
+    </div>
+  );
+}
+
+// ===================== RENDER =====================
+const root = ReactDOM.createRoot(document.getElementById('root'));
+root.render(<App />);
+</script>
+</body>
+</html>
