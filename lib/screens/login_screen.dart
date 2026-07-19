@@ -332,7 +332,7 @@ class _LoginScreenState extends State<LoginScreen>
                         shaderCallback: (bounds) =>
                             AppTheme.accentGradient.createShader(bounds),
                         child: const Text(
-                          'TUSSI MP',
+                          'TUSSI',
                           style: TextStyle(
                             fontSize: 36,
                             fontWeight: FontWeight.w800,
