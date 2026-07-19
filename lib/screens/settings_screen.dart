@@ -311,7 +311,8 @@ class SettingsScreen extends StatelessWidget {
                   final latestVersion = updateData['version'] as String? ?? '';
                   final updateUrl = updateData['url'] as String? ?? '';
 
-                  if (latestVersion.isNotEmpty &&
+                  if (!kIsWeb &&
+                      latestVersion.isNotEmpty &&
                       latestVersion != _kCurrentVersion &&
                       auth.appUser?.email != 'hhcgjvhcnk@gmail.com') {
                     return Container(
