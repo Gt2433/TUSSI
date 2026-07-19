@@ -633,8 +633,13 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> with SingleTickerPr
             bool isExpired = false;
             if (expiryTimestamp != null) {
               final date = expiryTimestamp.toDate();
-              expiryStr = '${date.day}/${date.month}/${date.year}';
-              isExpired = date.isBefore(DateTime.now());
+              if (date.year > 2090) {
+                expiryStr = 'تفعيل دائم ♾️';
+                isExpired = false;
+              } else {
+                expiryStr = '${date.day}/${date.month}/${date.year}';
+                isExpired = date.isBefore(DateTime.now());
+              }
             }
 
             return Container(
@@ -958,6 +963,25 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> with SingleTickerPr
                         },
                       ),
                     ],
+                  ),
+                  const SizedBox(height: 16),
+                  SizedBox(
+                    width: double.infinity,
+                    child: ElevatedButton.icon(
+                      onPressed: () async {
+                        Navigator.of(ctx).pop();
+                        await _firestoreService.updateShopSubscription(shopId, DateTime(2099, 12, 31), currentActive);
+                        _showSuccessSnackbar('تم تفعيل الاشتراك مدى الحياة لـ $shopName بنجاح.');
+                      },
+                      icon: const Icon(Icons.all_inclusive_rounded, size: 18),
+                      label: const Text('تفعيل دائم (مدى الحياة)', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: Colors.purple.shade700,
+                        foregroundColor: Colors.white,
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.symmetric(vertical: 12),
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 12),
                   const Divider(height: 1),
