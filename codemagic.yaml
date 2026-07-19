@@ -16,7 +16,7 @@ workflows:
       - name: Disable iOS Swift Package Manager and Get dependencies
         script: |
           flutter config --no-enable-ios-swift-package-manager
-          flutter pub get
+          flutter pub upgrade
       - name: Build iOS App (Unsigned Debug)
         script: |
           flutter build ios --debug --no-codesign
