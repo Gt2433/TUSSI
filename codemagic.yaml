@@ -13,8 +13,9 @@ workflows:
       branch_patterns:
         - pattern: '*'
     scripts:
-      - name: Flutter pub get
+      - name: Disable iOS Swift Package Manager and Get dependencies
         script: |
+          flutter config --no-enable-ios-swift-package-manager
           flutter pub get
       - name: Build iOS App (Unsigned Debug)
         script: |
