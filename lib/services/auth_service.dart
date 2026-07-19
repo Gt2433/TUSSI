@@ -1,6 +1,7 @@
 import 'package:firebase_auth/firebase_auth.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
 import 'package:google_sign_in/google_sign_in.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import '../models/user_model.dart';
 
 class AuthService {
@@ -17,9 +18,16 @@ class AuthService {
   /// Sign in with Google
   Future<UserCredential?> signInWithGoogle() async {
     if (!_isGoogleInitialized) {
-      await GoogleSignIn.instance.initialize(
-        serverClientId: '368377187521-ome7jektnf3333e7bgfplntvamnknpcp.apps.googleusercontent.com',
-      );
+      try {
+        await GoogleSignIn.instance.initialize(
+          clientId: kIsWeb ? '368377187521-ome7jektnf3333e7bgfplntvamnknpcp.apps.googleusercontent.com' : null,
+          serverClientId: '368377187521-ome7jektnf3333e7bgfplntvamnknpcp.apps.googleusercontent.com',
+        );
+      } catch (e) {
+        if (!e.toString().contains('init() has already been called')) {
+          rethrow;
+        }
+      }
       _isGoogleInitialized = true;
     }
     final GoogleSignInAccount? googleUser = await GoogleSignIn.instance.authenticate();
