@@ -85,7 +85,7 @@ class FantexApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
-            title: 'tussi',
+            title: 'tussi TEST',
             navigatorKey: appNavigatorKey,
             debugShowCheckedModeBanner: false,
             themeMode: themeProvider.themeMode,
