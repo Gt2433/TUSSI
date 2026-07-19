@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
@@ -709,17 +710,19 @@ class SettingsScreen extends StatelessWidget {
                     trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
                     onTap: () => _showAboutDialog(context),
                   ),
-                  const Divider(height: 1, indent: 20, endIndent: 20),
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                    leading: Icon(Icons.qr_code_2_rounded, color: AppTheme.accentAmber),
-                    title: Text(
-                      isAr ? 'مشاركة ونشر التطبيق' : 'Share Application',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                  if (!kIsWeb) ...[
+                    const Divider(height: 1, indent: 20, endIndent: 20),
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                      leading: Icon(Icons.qr_code_2_rounded, color: AppTheme.accentAmber),
+                      title: Text(
+                        isAr ? 'مشاركة ونشر التطبيق' : 'Share Application',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      ),
+                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
+                      onTap: () => _showShareAppDialog(context),
                     ),
-                    trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                    onTap: () => _showShareAppDialog(context),
-                  ),
+                  ],
                 ],
               ),
             ),
