@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 import 'package:flutter_web_plugins/url_strategy.dart';
 
@@ -28,10 +29,13 @@ void main() async {
   await Firebase.initializeApp(
     options: const FirebaseOptions(
       apiKey: 'AIzaSyCtEPgAIoEY6rZpzYBAurutr-kCobJaaBI',
-      appId: '1:368377187521:android:b04542a9b767eaaed5d840',
+      appId: kIsWeb 
+          ? '1:368377187521:web:279c079cdad3f9f0d5d840' 
+          : '1:368377187521:android:b04542a9b767eaaed5d840',
       messagingSenderId: '368377187521',
       projectId: 'fantex',
       storageBucket: 'fantex.firebasestorage.app',
+      authDomain: 'fantex.firebaseapp.com',
     ),
   );
 
