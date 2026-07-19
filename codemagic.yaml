@@ -28,9 +28,9 @@ workflows:
     max_build_duration: 30
     instance_type: mac_mini_m2
     environment:
+      groups:
+        - firebase
       flutter: stable
-      vars:
-        FIREBASE_TOKEN: $FIREBASE_TOKEN
     triggering:
       events: []
       branch_patterns:
