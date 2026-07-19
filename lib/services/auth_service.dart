@@ -17,29 +17,36 @@ class AuthService {
 
   /// Sign in with Google
   Future<UserCredential?> signInWithGoogle() async {
-    if (!_isGoogleInitialized) {
-      try {
-        await GoogleSignIn.instance.initialize(
-          clientId: kIsWeb ? '368377187521-ome7jektnf3333e7bgfplntvamnknpcp.apps.googleusercontent.com' : null,
-          serverClientId: '368377187521-ome7jektnf3333e7bgfplntvamnknpcp.apps.googleusercontent.com',
-        );
-      } catch (e) {
-        if (!e.toString().contains('init() has already been called')) {
-          rethrow;
+    if (kIsWeb) {
+      final googleProvider = GoogleAuthProvider();
+      googleProvider.setCustomParameters({
+        'prompt': 'select_account',
+      });
+      return await _auth.signInWithPopup(googleProvider);
+    } else {
+      if (!_isGoogleInitialized) {
+        try {
+          await GoogleSignIn.instance.initialize(
+            serverClientId: '368377187521-ome7jektnf3333e7bgfplntvamnknpcp.apps.googleusercontent.com',
+          );
+        } catch (e) {
+          if (!e.toString().contains('init() has already been called')) {
+            rethrow;
+          }
         }
+        _isGoogleInitialized = true;
       }
-      _isGoogleInitialized = true;
+      final GoogleSignInAccount? googleUser = await GoogleSignIn.instance.authenticate();
+      if (googleUser == null) return null;
+
+      final GoogleSignInAuthentication googleAuth = googleUser.authentication;
+
+      final credential = GoogleAuthProvider.credential(
+        idToken: googleAuth.idToken,
+      );
+
+      return await _auth.signInWithCredential(credential);
     }
-    final GoogleSignInAccount? googleUser = await GoogleSignIn.instance.authenticate();
-    if (googleUser == null) return null;
-
-    final GoogleSignInAuthentication googleAuth = googleUser.authentication;
-
-    final credential = GoogleAuthProvider.credential(
-      idToken: googleAuth.idToken,
-    );
-
-    return await _auth.signInWithCredential(credential);
   }
 
   /// Sign in with email and password
