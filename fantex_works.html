@@ -121,6 +121,7 @@ function AuthProvider({ children }) {
         uid: cred.user.uid, name: userInfo.name, username: userInfo.username,
         phone: userInfo.phone, email, role: userInfo.role,
         shopId: userInfo.shopId || null, warehouseId: userInfo.warehouseId || null,
+        photoBase64: userInfo.photoBase64 || null,
         status: "active", createdAt: fb.serverTimestamp()
       });
       const snap = await fb.getDoc(fb.doc(db, "users", cred.user.uid));
@@ -373,6 +374,7 @@ function RegisterScreen({ onNavigate }) {
   const [email, setEmail] = useState("");
   const [password, setPassword] = useState("");
   const [confirmPass, setConfirmPass] = useState("");
+  const [photoBase64, setPhotoBase64] = useState("");
   const [isLoading, setIsLoading] = useState(false);
   const [shops, setShops] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
@@ -404,7 +406,7 @@ function RegisterScreen({ onNavigate }) {
   const handleRegister = async () => {
     setIsLoading(true);
     try {
-      await register(email, password, { name, username, phone, role, shopId: role==="shop_worker"?location:null, warehouseId: role==="warehouse"?location:null });
+      await register(email, password, { name, username, phone, role, shopId: role==="shop_worker"?location:null, warehouseId: role==="warehouse"?location:null, photoBase64 });
     } catch(e) {}
     setIsLoading(false);
   };
@@ -452,6 +454,32 @@ function RegisterScreen({ onNavigate }) {
           )}
           {step===3 && (
             <div className="slide-up space-y-4">
+              <div className="flex flex-col items-center mb-6">
+                <label className="relative cursor-pointer group">
+                  <div className="w-24 h-24 rounded-full bg-gray-900 border border-gray-800 flex items-center justify-center overflow-hidden relative">
+                    {photoBase64 ? (
+                      <img src={`data:image/jpeg;base64,${photoBase64}`} className="w-full h-full object-cover" />
+                    ) : (
+                      <span className="text-3xl text-gray-600">👤</span>
+                    )}
+                    <div className="absolute inset-0 bg-black/40 flex items-center justify-center opacity-0 group-hover:opacity-100 transition-opacity">
+                      <span className="text-white text-xs">تغيير الصورة</span>
+                    </div>
+                  </div>
+                  <input type="file" accept="image/*" className="hidden" onChange={e => {
+                    const file = e.target.files[0];
+                    if (file) {
+                      const reader = new FileReader();
+                      reader.onloadend = () => {
+                        const base64String = reader.result.split(',')[1];
+                        setPhotoBase64(base64String);
+                      };
+                      reader.readAsDataURL(file);
+                    }
+                  }} />
+                </label>
+                <span className="text-xs text-gray-500 mt-2">صورة الحساب (اختياري)</span>
+              </div>
               {[["الاسم الكامل","text",name,setName,"محمد أحمد"],["اسم المستخدم","text",username,setUsername,"mohamed_ahmed"],["رقم الهاتف","tel",phone,setPhone,"05XX XX XX XX"],["البريد الإلكتروني","email",email,setEmail,"example@email.com"]].map(([l,t,v,s,p])=>(
                 <div key={l}><label className="block text-sm text-gray-400 mb-2">{l}</label><input type={t} value={v} onChange={e=>s(e.target.value)} className="inp" placeholder={p} required /></div>
               ))}

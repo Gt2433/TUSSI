@@ -129,7 +129,6 @@ class AuthProvider extends ChangeNotifier {
         final codeData = codeDoc.data() as Map<String, dynamic>?;
         final shopName = (codeData?['shopName'] as String?) ?? displayName;
 
-        // Register shop + link admin user in Firestore (with default fabrics)
         await _firestoreService.registerShopAndAdmin(
           activationCode: activationCode,
           adminUid: uid,
@@ -137,6 +136,7 @@ class AuthProvider extends ChangeNotifier {
           adminName: displayName,
           shopName: shopName,
           password: password,
+          photoBase64: photoBase64,
         );
 
         // Load fresh user data

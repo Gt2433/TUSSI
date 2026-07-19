@@ -517,14 +517,15 @@ class FirestoreService {
     required String adminName,
     required String shopName,
     String? password,
+    String? photoBase64,
   }) async {
     final codeRef = _firestore.collection('activation_codes').doc(activationCode.trim().toUpperCase());
     final codeDoc = await codeRef.get();
     final codeData = codeDoc.data() as Map<String, dynamic>?;
-
+ 
     final bool isAlreadyUsed = codeData?['isUsed'] as bool? ?? false;
     final String? existingShopId = codeData?['shopId'] as String?;
-
+ 
     if (isAlreadyUsed && existingShopId != null) {
       // The shop already exists. Join this user as a shop employee.
       await _firestore.collection('users').doc(adminUid).set({
@@ -534,14 +535,15 @@ class FirestoreService {
         'password': password,
         'role': 'shop_employee',
         'shopId': existingShopId,
+        'photoBase64': photoBase64,
         'createdAt': FieldValue.serverTimestamp(),
       });
       return;
     }
-
+ 
     final int durationSeconds = codeData?['durationSeconds'] as int? ?? 0;
     final batch = _firestore.batch();
-
+ 
     // 1. Create Shop doc
     final shopId = _firestore.collection('shops').doc().id;
     final inviteCode = _generateRandomInviteCode();
@@ -555,7 +557,7 @@ class FirestoreService {
       'subscriptionExpiresAt': Timestamp.fromDate(DateTime.now().add(Duration(seconds: durationSeconds))),
       'createdAt': FieldValue.serverTimestamp(),
     });
-
+ 
     // 2. Mark activation code as used
     batch.update(codeRef, {
       'isUsed': true,
@@ -563,7 +565,7 @@ class FirestoreService {
       'usedAt': FieldValue.serverTimestamp(),
       'shopId': shopId,
     });
-
+ 
     // 3. Create admin user doc
     final userRef = _firestore.collection('users').doc(adminUid);
     batch.set(userRef, {
@@ -573,9 +575,10 @@ class FirestoreService {
       'password': password,
       'role': 'shop_admin',
       'shopId': shopId,
+      'photoBase64': photoBase64,
       'createdAt': FieldValue.serverTimestamp(),
     });
-
+ 
     await batch.commit();
   }
 

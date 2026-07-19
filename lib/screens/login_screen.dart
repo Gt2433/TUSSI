@@ -1,9 +1,13 @@
+import 'dart:convert';
+import 'dart:typed_data';
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:image_picker/image_picker.dart';
 import '../providers/auth_provider.dart' as app_auth;
 import '../providers/language_provider.dart';
 import '../theme/app_theme.dart';
+import '../widgets/image_cropper_dialog.dart';
 
 const String _kWhatsAppNumber = '213655603829';
 
@@ -25,6 +29,96 @@ class _LoginScreenState extends State<LoginScreen>
 
   bool _isRegistering = false;
   bool _obscurePassword = true;
+  String? _profilePhotoBase64;
+
+  Future<void> _pickProfileImage() async {
+    final isAr = LanguageProvider.isArabic(context);
+    final ImageSource? source = await showModalBottomSheet<ImageSource>(
+      context: context,
+      backgroundColor: AppTheme.surfaceCard,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(24)),
+      ),
+      builder: (ctx) {
+        return SafeArea(
+          child: Padding(
+            padding: const EdgeInsets.symmetric(vertical: 20, horizontal: 16),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                  child: Text(
+                    isAr ? 'اختر مصدر الصورة' : 'Select image source',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                      color: Colors.white,
+                    ),
+                  ),
+                ),
+                const SizedBox(height: 12),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentAmber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.camera_alt_rounded, color: AppTheme.accentAmber),
+                  ),
+                  title: Text(isAr ? 'الكاميرا' : 'Camera', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
+                ),
+                const SizedBox(height: 8),
+                ListTile(
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentAmber.withValues(alpha: 0.12),
+                      borderRadius: BorderRadius.circular(10),
+                    ),
+                    child: Icon(Icons.photo_library_rounded, color: AppTheme.accentAmber),
+                  ),
+                  title: Text(isAr ? 'المعرض' : 'Gallery', style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                  onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+
+    if (source == null) return;
+
+    final ImagePicker picker = ImagePicker();
+    final XFile? pickedFile = await picker.pickImage(
+      source: source,
+      maxWidth: 1024,
+      maxHeight: 1024,
+      imageQuality: 85,
+    );
+
+    if (pickedFile != null) {
+      final Uint8List originalBytes = await pickedFile.readAsBytes();
+
+      if (!mounted) return;
+
+      final Uint8List? croppedBytes = await showDialog<Uint8List>(
+        context: context,
+        barrierDismissible: false,
+        builder: (context) => ImageCropperDialog(imageBytes: originalBytes),
+      );
+
+      if (croppedBytes != null) {
+        setState(() {
+          _profilePhotoBase64 = base64Encode(croppedBytes);
+        });
+      }
+    }
+  }
 
   late AnimationController _animController;
   late Animation<double> _fadeAnim;
@@ -174,6 +268,7 @@ class _LoginScreenState extends State<LoginScreen>
         password: _passwordController.text,
         displayName: _nameController.text.trim(),
         activationCode: _activationCodeController.text.trim(),
+        photoBase64: _profilePhotoBase64,
       );
     } else {
       await authProvider.signIn(
@@ -383,6 +478,46 @@ class _LoginScreenState extends State<LoginScreen>
                                   fontWeight: FontWeight.w700,
                                 ),
                               ),
+                              if (_isRegistering) ...[
+                                const SizedBox(height: 20),
+                                Center(
+                                  child: Stack(
+                                    children: [
+                                      CircleAvatar(
+                                        radius: 50,
+                                        backgroundColor: AppTheme.surfaceDark,
+                                        backgroundImage: _profilePhotoBase64 != null
+                                            ? MemoryImage(base64Decode(_profilePhotoBase64!))
+                                            : null,
+                                        child: _profilePhotoBase64 == null
+                                            ? Icon(Icons.person_rounded, size: 50, color: AppTheme.textMuted)
+                                            : null,
+                                      ),
+                                      Positioned(
+                                        bottom: 0,
+                                        right: 0,
+                                        child: InkWell(
+                                          onTap: _pickProfileImage,
+                                          borderRadius: BorderRadius.circular(20),
+                                          child: Container(
+                                            padding: const EdgeInsets.all(8),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.accentAmber,
+                                              shape: BoxShape.circle,
+                                              border: Border.all(color: AppTheme.surfaceCard, width: 2),
+                                            ),
+                                            child: Icon(
+                                              Icons.camera_alt_rounded,
+                                              size: 18,
+                                              color: AppTheme.surfaceDark,
+                                            ),
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ),
+                              ],
                               if (_isRegistering) ...[
                                 const SizedBox(height: 16),
                                 Container(
