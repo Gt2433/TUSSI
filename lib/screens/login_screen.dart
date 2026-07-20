@@ -796,8 +796,7 @@ class _LoginScreenState extends State<LoginScreen>
                                             ),
                                           ),
                                         ],
-                                      )
-
+                                      ),
                                       const SizedBox(height: 12),
                                       // WhatsApp Direct Request Button
                                       SizedBox(
