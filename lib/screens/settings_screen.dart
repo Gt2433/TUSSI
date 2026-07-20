@@ -17,7 +17,7 @@ class SettingsScreen extends StatelessWidget {
   final bool isTab;
   const SettingsScreen({super.key, this.isTab = false});
 
-  static const String _kCurrentVersion = '2.1.0';
+  static const String _kCurrentVersion = '2.1.1';
 
   // ─── Show "About App" Dialog ──────────────────────────────────
   void _showAboutDialog(BuildContext context) {
