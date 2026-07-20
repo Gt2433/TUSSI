@@ -572,34 +572,39 @@ class _LoginScreenState extends State<LoginScreen>
                                             child: Row(
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
-                                                Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Text(
-                                                      isAr ? 'الاشتراك الشهري' : 'Monthly Plan',
-                                                      style: TextStyle(
-                                                        fontSize: 13,
-                                                        fontWeight: FontWeight.bold,
-                                                        color: AppTheme.textPrimary,
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Text(
+                                                        isAr ? 'الاشتراك الشهري' : 'Monthly Plan',
+                                                        style: TextStyle(
+                                                          fontSize: 13,
+                                                          fontWeight: FontWeight.bold,
+                                                          color: AppTheme.textPrimary,
+                                                        ),
                                                       ),
-                                                    ),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      isAr ? 'تجديد تلقائي شهرياً' : 'Renewed monthly',
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        color: AppTheme.textMuted,
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        isAr ? 'تجديد تلقائي شهرياً' : 'Renewed monthly',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: AppTheme.textMuted,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
                                                       ),
-                                                    ),
-                                                  ],
+                                                    ],
+                                                  ),
                                                 ),
+                                                const SizedBox(width: 8),
                                                 Column(
                                                   crossAxisAlignment: CrossAxisAlignment.end,
                                                   children: [
                                                     Text(
                                                       isAr ? '2,000 د.ج' : '2,000 DZD',
                                                       style: TextStyle(
-                                                        fontSize: 15,
+                                                        fontSize: 14,
                                                         fontWeight: FontWeight.w800,
                                                         color: AppTheme.accentAmber,
                                                       ),
@@ -632,54 +637,61 @@ class _LoginScreenState extends State<LoginScreen>
                                             child: Row(
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
-                                                Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(
-                                                      children: [
-                                                        Text(
-                                                          isAr ? 'الاشتراك السنوي' : 'Yearly Plan',
-                                                          style: TextStyle(
-                                                            fontSize: 13,
-                                                            fontWeight: FontWeight.bold,
-                                                            color: AppTheme.textPrimary,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(width: 8),
-                                                        Container(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                          decoration: BoxDecoration(
-                                                            color: AppTheme.accentAmber,
-                                                            borderRadius: BorderRadius.circular(6),
-                                                          ),
-                                                          child: Text(
-                                                            isAr ? 'الأكثر توفيراً' : 'Best Value',
-                                                            style: const TextStyle(
-                                                              fontSize: 8,
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Wrap(
+                                                        spacing: 6,
+                                                        runSpacing: 4,
+                                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                                        children: [
+                                                          Text(
+                                                            isAr ? 'الاشتراك السنوي' : 'Yearly Plan',
+                                                            style: TextStyle(
+                                                              fontSize: 13,
                                                               fontWeight: FontWeight.bold,
-                                                              color: Colors.black,
+                                                              color: AppTheme.textPrimary,
                                                             ),
                                                           ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      isAr ? 'اشتراك كامل لمدة 12 شهراً' : '12 months full access',
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        color: AppTheme.textSecondary,
+                                                          Container(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                            decoration: BoxDecoration(
+                                                              color: AppTheme.accentAmber,
+                                                              borderRadius: BorderRadius.circular(6),
+                                                            ),
+                                                            child: Text(
+                                                              isAr ? 'الأكثر توفيراً' : 'Best Value',
+                                                              style: const TextStyle(
+                                                                fontSize: 8,
+                                                                fontWeight: FontWeight.bold,
+                                                                color: Colors.black,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
                                                       ),
-                                                    ),
-                                                  ],
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        isAr ? 'اشتراك كامل لمدة 12 شهراً' : '12 months full access',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: AppTheme.textSecondary,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
+                                                const SizedBox(width: 8),
                                                 Column(
                                                   crossAxisAlignment: CrossAxisAlignment.end,
                                                   children: [
                                                     Text(
                                                       isAr ? '50,000 د.ج' : '50,000 DZD',
                                                       style: TextStyle(
-                                                        fontSize: 15,
+                                                        fontSize: 14,
                                                         fontWeight: FontWeight.w800,
                                                         color: AppTheme.accentAmber,
                                                       ),
@@ -712,54 +724,61 @@ class _LoginScreenState extends State<LoginScreen>
                                             child: Row(
                                               mainAxisAlignment: MainAxisAlignment.spaceBetween,
                                               children: [
-                                                Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.start,
-                                                  children: [
-                                                    Row(
-                                                      children: [
-                                                        Text(
-                                                          isAr ? 'الاشتراك الدائم' : 'Lifetime Plan',
-                                                          style: const TextStyle(
-                                                            fontSize: 13,
-                                                            fontWeight: FontWeight.bold,
-                                                            color: Colors.white,
-                                                          ),
-                                                        ),
-                                                        const SizedBox(width: 8),
-                                                        Container(
-                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                          decoration: BoxDecoration(
-                                                            color: const Color(0xFF9C27B0),
-                                                            borderRadius: BorderRadius.circular(6),
-                                                          ),
-                                                          child: Text(
-                                                            isAr ? 'مدى الحياة' : 'Lifetime',
+                                                Expanded(
+                                                  child: Column(
+                                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                                    children: [
+                                                      Wrap(
+                                                        spacing: 6,
+                                                        runSpacing: 4,
+                                                        crossAxisAlignment: WrapCrossAlignment.center,
+                                                        children: [
+                                                          Text(
+                                                            isAr ? 'الاشتراك الدائم' : 'Lifetime Plan',
                                                             style: const TextStyle(
-                                                              fontSize: 8,
+                                                              fontSize: 13,
                                                               fontWeight: FontWeight.bold,
                                                               color: Colors.white,
                                                             ),
                                                           ),
-                                                        ),
-                                                      ],
-                                                    ),
-                                                    const SizedBox(height: 2),
-                                                    Text(
-                                                      isAr ? 'شراء لمرة واحدة وتفعيل دائم' : 'One-time payment, lifetime use',
-                                                      style: TextStyle(
-                                                        fontSize: 10,
-                                                        color: AppTheme.textSecondary,
+                                                          Container(
+                                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                            decoration: BoxDecoration(
+                                                              color: const Color(0xFF9C27B0),
+                                                              borderRadius: BorderRadius.circular(6),
+                                                            ),
+                                                            child: Text(
+                                                              isAr ? 'مدى الحياة' : 'Lifetime',
+                                                              style: const TextStyle(
+                                                                fontSize: 8,
+                                                                fontWeight: FontWeight.bold,
+                                                                color: Colors.white,
+                                                              ),
+                                                            ),
+                                                          ),
+                                                        ],
                                                       ),
-                                                    ),
-                                                  ],
+                                                      const SizedBox(height: 2),
+                                                      Text(
+                                                        isAr ? 'شراء لمرة واحدة وتفعيل دائم' : 'One-time payment, lifetime use',
+                                                        style: TextStyle(
+                                                          fontSize: 10,
+                                                          color: AppTheme.textSecondary,
+                                                        ),
+                                                        maxLines: 1,
+                                                        overflow: TextOverflow.ellipsis,
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ),
+                                                const SizedBox(width: 8),
                                                 Column(
                                                   crossAxisAlignment: CrossAxisAlignment.end,
                                                   children: [
                                                     Text(
                                                       isAr ? '120,000 د.ج' : '120,000 DZD',
                                                       style: const TextStyle(
-                                                        fontSize: 15,
+                                                        fontSize: 14,
                                                         fontWeight: FontWeight.w800,
                                                         color: Color(0xFFBA68C8),
                                                       ),
@@ -777,7 +796,8 @@ class _LoginScreenState extends State<LoginScreen>
                                             ),
                                           ),
                                         ],
-                                      ),
+                                      )
+
                                       const SizedBox(height: 12),
                                       // WhatsApp Direct Request Button
                                       SizedBox(
