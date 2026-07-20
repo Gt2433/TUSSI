@@ -570,6 +570,18 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
+                    // Edit Fabric Price
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                      leading: Icon(Icons.edit_note_rounded, color: AppTheme.accentAmber),
+                      title: Text(
+                        isAr ? 'تعديل سعر القماش' : 'Edit Fabric Price',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      ),
+                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
+                      onTap: () => _showEditFabricPricePicker(context, firestoreService, shopId),
+                    ),
+                    const Divider(height: 1, indent: 20, endIndent: 20),
                     // Delete Fabric Type
                     ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
@@ -746,6 +758,170 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+
+  void _showEditFabricPricePicker(BuildContext context, FirestoreService firestoreService, String shopId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        String searchQuery = '';
+        final isAr = context.tr('tab_orders') == 'الطلبيات';
+
+        return StreamBuilder<List<FabricType>>(
+          stream: firestoreService.streamFabricTypes(shopId),
+          builder: (context, snapshot) {
+            final fabrics = snapshot.data ?? [];
+            return StatefulBuilder(
+              builder: (context, setState) {
+                final filtered = fabrics.where((type) {
+                  return type.name.toLowerCase().contains(searchQuery.toLowerCase());
+                }).toList();
+
+                return Padding(
+                  padding: EdgeInsets.only(
+                    left: 20,
+                    right: 20,
+                    top: 20,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isAr ? 'تعديل سعر قماش' : 'Edit Fabric Price',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: isAr ? 'بحث عن قماش...' : 'Search fabric...',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            searchQuery = val;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.4,
+                        ),
+                        child: filtered.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Center(
+                                  child: Text(
+                                    isAr ? 'لم يتم العثور على أقمشة' : 'No fabrics found',
+                                    style: TextStyle(color: AppTheme.textMuted),
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                shrinkWrap: true,
+                                itemCount: filtered.length,
+                                separatorBuilder: (context, index) => const Divider(height: 1),
+                                itemBuilder: (context, idx) {
+                                  final type = filtered[idx];
+                                  return ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    title: Text(
+                                      type.name,
+                                      style: TextStyle(color: AppTheme.textPrimary),
+                                    ),
+                                    subtitle: Text(
+                                      '${type.price.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} DA / ${type.unit == 'kg' ? (isAr ? 'كغ' : 'kg') : (isAr ? 'متر' : 'm')}',
+                                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: Icon(Icons.edit_rounded, color: AppTheme.accentAmber, size: 22),
+                                      onPressed: () async {
+                                        final priceController = TextEditingController(
+                                          text: type.price.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), ''),
+                                        );
+                                        final newPrice = await showDialog<double>(
+                                          context: context,
+                                          builder: (dialogCtx) => AlertDialog(
+                                            title: Text(isAr ? 'تعديل سعر قماش' : 'Edit Fabric Price'),
+                                            content: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              children: [
+                                                Text(
+                                                  isAr 
+                                                      ? 'أدخل السعر الجديد لقماش "${type.name}":' 
+                                                      : 'Enter new price for fabric "${type.name}":',
+                                                  style: const TextStyle(fontSize: 14),
+                                                ),
+                                                const SizedBox(height: 12),
+                                                TextField(
+                                                  controller: priceController,
+                                                  keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                                                  autofocus: true,
+                                                  decoration: InputDecoration(
+                                                    suffixText: isAr ? 'د.ج' : 'DA',
+                                                  ),
+                                                ),
+                                              ],
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.of(dialogCtx).pop(),
+                                                child: Text(isAr ? 'إلغاء' : 'Cancel'),
+                                              ),
+                                              ElevatedButton(
+                                                onPressed: () {
+                                                  final val = double.tryParse(priceController.text);
+                                                  if (val != null && val >= 0) {
+                                                    Navigator.of(dialogCtx).pop(val);
+                                                  }
+                                                },
+                                                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentAmber, foregroundColor: AppTheme.surfaceDark),
+                                                child: Text(isAr ? 'حفظ' : 'Save'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                        if (newPrice != null) {
+                                          await firestoreService.updateFabricPrice(type.name, newPrice, shopId);
+                                          setState(() {});
+                                        }
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
 
   void _showDeleteFabricPicker(BuildContext context, FirestoreService firestoreService, String shopId) {
     showModalBottomSheet(

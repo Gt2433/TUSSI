@@ -57,6 +57,22 @@ class FirestoreService {
     }
   }
 
+  /// Update the price of a fabric type for a specific shop
+  Future<void> updateFabricPrice(String name, double newPrice, String shopId) async {
+    final docs = await _firestore
+        .collection('fabric_types')
+        .where('shopId', isEqualTo: shopId)
+        .get();
+        
+    final targetName = name.trim().toLowerCase();
+    for (final doc in docs.docs) {
+      final docName = (doc.data()['name'] as String? ?? '').trim().toLowerCase();
+      if (docName == targetName) {
+        await doc.reference.update({'price': newPrice});
+      }
+    }
+  }
+
   // ─── Saved Lengths (Fabric-Specific Sync) ─────────────────────
 
   /// Stream all globally saved lengths (deprecated)
