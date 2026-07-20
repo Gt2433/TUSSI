@@ -3,6 +3,7 @@ import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:url_launcher/url_launcher.dart';
 import 'package:cloud_firestore/cloud_firestore.dart';
+import 'package:firebase_auth/firebase_auth.dart';
 import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 
@@ -964,6 +965,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> with SingleTickerPr
                       ),
                     ],
                   ),
+                  if (FirebaseAuth.instance.currentUser?.email == 'hhcgjvhcnk@gmail.com') ...[
                   const SizedBox(height: 16),
                   SizedBox(
                     width: double.infinity,
@@ -983,6 +985,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> with SingleTickerPr
                       ),
                     ),
                   ),
+                  ],
                   const SizedBox(height: 12),
                   const Divider(height: 1),
                   const SizedBox(height: 12),

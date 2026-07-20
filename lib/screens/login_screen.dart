@@ -32,7 +32,7 @@ class _LoginScreenState extends State<LoginScreen>
   String? _profilePhotoBase64;
 
   Future<void> _pickProfileImage() async {
-    final isAr = LanguageProvider.isArabic(context);
+    final isAr = Provider.of<LanguageProvider>(context, listen: false).language == AppLanguage.ar;
     final ImageSource? source = await showModalBottomSheet<ImageSource>(
       context: context,
       backgroundColor: AppTheme.surfaceCard,
@@ -558,88 +558,222 @@ class _LoginScreenState extends State<LoginScreen>
                                         ],
                                       ),
                                       const SizedBox(height: 12),
-                                      Row(
+                                      Column(
                                         children: [
                                           // Monthly Plan
-                                          Expanded(
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                                              decoration: BoxDecoration(
-                                                color: AppTheme.surfaceDark.withValues(alpha: 0.4),
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(color: AppTheme.borderSubtle, width: 0.8),
-                                              ),
-                                              child: Column(
-                                                children: [
-                                                  Text(
-                                                    isAr ? 'الاشتراك الشهري' : 'Monthly',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: AppTheme.textSecondary,
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.surfaceDark.withValues(alpha: 0.4),
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(color: AppTheme.borderSubtle, width: 0.8),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Text(
+                                                      isAr ? 'الاشتراك الشهري' : 'Monthly Plan',
+                                                      style: TextStyle(
+                                                        fontSize: 13,
+                                                        fontWeight: FontWeight.bold,
+                                                        color: AppTheme.textPrimary,
+                                                      ),
                                                     ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    isAr ? '1,500 د.ج' : '1,500 DZD',
-                                                    style: TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.w800,
-                                                      color: AppTheme.accentAmber,
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      isAr ? 'تجديد تلقائي شهرياً' : 'Renewed monthly',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: AppTheme.textMuted,
+                                                      ),
                                                     ),
-                                                  ),
-                                                  Text(
-                                                    isAr ? 'شهرياً' : '/ month',
-                                                    style: TextStyle(
-                                                      fontSize: 9,
-                                                      color: AppTheme.textMuted,
+                                                  ],
+                                                ),
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      isAr ? '2,000 د.ج' : '2,000 DZD',
+                                                      style: TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: AppTheme.accentAmber,
+                                                      ),
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
+                                                    Text(
+                                                      isAr ? 'شهرياً' : '/ month',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        color: AppTheme.textSecondary,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
                                             ),
                                           ),
-                                          const SizedBox(width: 10),
+                                          const SizedBox(height: 10),
                                           // Yearly Plan (Best Choice)
-                                          Expanded(
-                                            child: Container(
-                                              padding: const EdgeInsets.symmetric(vertical: 10, horizontal: 8),
-                                              decoration: BoxDecoration(
-                                                color: AppTheme.accentAmber.withValues(alpha: 0.08),
-                                                borderRadius: BorderRadius.circular(12),
-                                                border: Border.all(
-                                                  color: AppTheme.accentAmber.withValues(alpha: 0.3),
-                                                  width: 1,
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                            decoration: BoxDecoration(
+                                              color: AppTheme.accentAmber.withValues(alpha: 0.08),
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: AppTheme.accentAmber.withValues(alpha: 0.3),
+                                                width: 1.2,
+                                              ),
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Text(
+                                                          isAr ? 'الاشتراك السنوي' : 'Yearly Plan',
+                                                          style: TextStyle(
+                                                            fontSize: 13,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: AppTheme.textPrimary,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: AppTheme.accentAmber,
+                                                            borderRadius: BorderRadius.circular(6),
+                                                          ),
+                                                          child: Text(
+                                                            isAr ? 'الأكثر توفيراً' : 'Best Value',
+                                                            style: const TextStyle(
+                                                              fontSize: 8,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: Colors.black,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
+                                                    ),
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      isAr ? 'اشتراك كامل لمدة 12 شهراً' : '12 months full access',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: AppTheme.textSecondary,
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      isAr ? '50,000 د.ج' : '50,000 DZD',
+                                                      style: TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: AppTheme.accentAmber,
+                                                      ),
+                                                    ),
+                                                    Text(
+                                                      isAr ? 'سنوياً' : '/ year',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        color: AppTheme.textSecondary,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                          const SizedBox(height: 10),
+                                          // Lifetime Plan (Ultimate)
+                                          Container(
+                                            width: double.infinity,
+                                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                            decoration: BoxDecoration(
+                                              color: const Color(0x1F9C27B0),
+                                              borderRadius: BorderRadius.circular(14),
+                                              border: Border.all(
+                                                color: const Color(0xFF9C27B0),
+                                                width: 1.2,
                                               ),
-                                              child: Column(
-                                                children: [
-                                                  Text(
-                                                    isAr ? 'الاشتراك السنوي' : 'Yearly',
-                                                    style: TextStyle(
-                                                      fontSize: 10,
-                                                      color: AppTheme.textSecondary,
-                                                      fontWeight: FontWeight.bold,
+                                            ),
+                                            child: Row(
+                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                                              children: [
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.start,
+                                                  children: [
+                                                    Row(
+                                                      children: [
+                                                        Text(
+                                                          isAr ? 'الاشتراك الدائم' : 'Lifetime Plan',
+                                                          style: const TextStyle(
+                                                            fontSize: 13,
+                                                            fontWeight: FontWeight.bold,
+                                                            color: Colors.white,
+                                                          ),
+                                                        ),
+                                                        const SizedBox(width: 8),
+                                                        Container(
+                                                          padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                                                          decoration: BoxDecoration(
+                                                            color: const Color(0xFF9C27B0),
+                                                            borderRadius: BorderRadius.circular(6),
+                                                          ),
+                                                          child: Text(
+                                                            isAr ? 'مدى الحياة' : 'Lifetime',
+                                                            style: const TextStyle(
+                                                              fontSize: 8,
+                                                              fontWeight: FontWeight.bold,
+                                                              color: Colors.white,
+                                                            ),
+                                                          ),
+                                                        ),
+                                                      ],
                                                     ),
-                                                  ),
-                                                  const SizedBox(height: 4),
-                                                  Text(
-                                                    isAr ? '18,000 د.ج' : '18,000 DZD',
-                                                    style: TextStyle(
-                                                      fontSize: 14,
-                                                      fontWeight: FontWeight.w800,
-                                                      color: AppTheme.accentAmber,
+                                                    const SizedBox(height: 2),
+                                                    Text(
+                                                      isAr ? 'شراء لمرة واحدة وتفعيل دائم' : 'One-time payment, lifetime use',
+                                                      style: TextStyle(
+                                                        fontSize: 10,
+                                                        color: AppTheme.textSecondary,
+                                                      ),
                                                     ),
-                                                  ),
-                                                  Text(
-                                                    isAr ? 'اشتراك 12 شهراً' : '12 months access',
-                                                    style: TextStyle(
-                                                      fontSize: 9,
-                                                      color: AppTheme.textSecondary,
-                                                      fontWeight: FontWeight.bold,
+                                                  ],
+                                                ),
+                                                Column(
+                                                  crossAxisAlignment: CrossAxisAlignment.end,
+                                                  children: [
+                                                    Text(
+                                                      isAr ? '120,000 د.ج' : '120,000 DZD',
+                                                      style: const TextStyle(
+                                                        fontSize: 15,
+                                                        fontWeight: FontWeight.w800,
+                                                        color: Color(0xFFBA68C8),
+                                                      ),
                                                     ),
-                                                  ),
-                                                ],
-                                              ),
+                                                    Text(
+                                                      isAr ? 'دفعة واحدة' : 'One-time',
+                                                      style: TextStyle(
+                                                        fontSize: 9,
+                                                        color: AppTheme.textSecondary,
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
                                             ),
                                           ),
                                         ],
