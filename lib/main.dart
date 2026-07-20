@@ -1,6 +1,7 @@
 import 'dart:async';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
+import 'package:google_fonts/google_fonts.dart';
 import 'package:firebase_core/firebase_core.dart';
 import 'package:provider/provider.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -25,6 +26,9 @@ void main() async {
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
 
+  // Disable Google Fonts runtime HTTP fetching to prevent startup hangs
+  GoogleFonts.config.allowRuntimeFetching = false;
+
   // Initialize Firebase with hardcoded options (no google-services.json needed)
   await Firebase.initializeApp(
     options: const FirebaseOptions(
@@ -43,16 +47,9 @@ void main() async {
   try {
     final fcm = FcmService();
     FcmService.navigatorKey = appNavigatorKey;
-    await fcm.init();
+    unawaited(fcm.init());
   } catch (e) {
     debugPrint("Failed to initialize FCM: $e");
-  }
-
-  // Clear all global saved lengths (one-time clean up request by user)
-  try {
-    await FirestoreService().clearAllGlobalSavedLengths();
-  } catch (e) {
-    debugPrint("Failed to clear global saved lengths: $e");
   }
 
   // Lock orientation to portrait for store kiosk use
