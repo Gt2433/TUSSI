@@ -1,3 +1,8 @@
+# Sensitive credentials - NEVER commit these
+serviceAccountJson.json
+*.serviceAccount.json
+google-services-secret.json
+
 # Miscellaneous
 *.class
 *.log
