@@ -602,7 +602,7 @@ class _LoginScreenState extends State<LoginScreen>
                                                   crossAxisAlignment: CrossAxisAlignment.end,
                                                   children: [
                                                     Text(
-                                                      isAr ? '2,000 د.ج' : '2,000 DZD',
+                                                      isAr ? '5,000 د.ج' : '5,000 DZD',
                                                       style: TextStyle(
                                                         fontSize: 14,
                                                         fontWeight: FontWeight.w800,
@@ -689,7 +689,7 @@ class _LoginScreenState extends State<LoginScreen>
                                                   crossAxisAlignment: CrossAxisAlignment.end,
                                                   children: [
                                                     Text(
-                                                      isAr ? '50,000 د.ج' : '50,000 DZD',
+                                                      isAr ? '40,000 د.ج' : '40,000 DZD',
                                                       style: TextStyle(
                                                         fontSize: 14,
                                                         fontWeight: FontWeight.w800,
