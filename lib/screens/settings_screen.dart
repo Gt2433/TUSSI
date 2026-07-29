@@ -570,40 +570,16 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 child: Column(
                   children: [
-                    // Edit Fabric Price
+                    // Consolidated Fabric Quick Actions
                     ListTile(
                       contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                      leading: Icon(Icons.edit_note_rounded, color: AppTheme.accentAmber),
+                      leading: Icon(Icons.settings_suggest_rounded, color: AppTheme.accentAmber),
                       title: Text(
-                        isAr ? 'تعديل سعر القماش' : 'Edit Fabric Price',
+                        isAr ? 'عمليات التحكم بالقماش السريعة' : 'Fabric Quick Actions',
                         style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
                       ),
                       trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                      onTap: () => _showEditFabricPricePicker(context, firestoreService, shopId),
-                    ),
-                    const Divider(height: 1, indent: 20, endIndent: 20),
-                    // Delete Fabric Type
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                      leading: Icon(Icons.texture_rounded, color: AppTheme.error),
-                      title: Text(
-                        isAr ? 'حذف قماش' : 'Delete Fabric',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                      ),
-                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                      onTap: () => _showDeleteFabricPicker(context, firestoreService, shopId),
-                    ),
-                    const Divider(height: 1, indent: 20, endIndent: 20),
-                    // Delete Saved Lengths
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                      leading: Icon(Icons.straighten_rounded, color: AppTheme.error),
-                      title: Text(
-                        isAr ? 'حذف الأمتار المحفوظة' : 'Delete Saved Lengths',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                      ),
-                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                      onTap: () => _showDeleteLengthPicker(context, firestoreService, shopId),
+                      onTap: () => _showFabricActionsMenu(context, firestoreService, shopId),
                     ),
                   ],
                 ),
@@ -758,6 +734,230 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+
+  void _showFabricActionsMenu(BuildContext context, FirestoreService firestoreService, String shopId) {
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isAr ? 'إجراءات القماش السريعة' : 'Fabric Quick Actions',
+                    style: const TextStyle(
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
+                    ),
+                  ),
+                  IconButton(
+                    icon: const Icon(Icons.close_rounded),
+                    onPressed: () => Navigator.of(context).pop(),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 16),
+              ListTile(
+                leading: Icon(Icons.drive_file_rename_outline_rounded, color: AppTheme.accentAmber),
+                title: Text(
+                  isAr ? 'تعديل اسم القماش' : 'Edit Fabric Name',
+                  style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _showEditFabricNamePicker(context, firestoreService, shopId);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.edit_note_rounded, color: AppTheme.accentAmber),
+                title: Text(
+                  isAr ? 'تعديل سعر القماش' : 'Edit Fabric Price',
+                  style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _showEditFabricPricePicker(context, firestoreService, shopId);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.texture_rounded, color: AppTheme.error),
+                title: Text(
+                  isAr ? 'حذف قماش' : 'Delete Fabric',
+                  style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _showDeleteFabricPicker(context, firestoreService, shopId);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.straighten_rounded, color: AppTheme.error),
+                title: Text(
+                  isAr ? 'حذف الأمتار المحفوظة' : 'Delete Saved Lengths',
+                  style: TextStyle(color: AppTheme.error, fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _showDeleteLengthPicker(context, firestoreService, shopId);
+                },
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
+
+  void _showEditFabricNamePicker(BuildContext context, FirestoreService firestoreService, String shopId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        String searchQuery = '';
+        final isAr = context.tr('tab_orders') == 'الطلبيات';
+
+        return StreamBuilder<List<FabricType>>(
+          stream: firestoreService.streamFabricTypes(shopId),
+          builder: (context, snapshot) {
+            final fabrics = snapshot.data ?? [];
+            return StatefulBuilder(
+              builder: (context, setState) {
+                final filtered = fabrics.where((type) {
+                  return type.name.toLowerCase().contains(searchQuery.toLowerCase());
+                }).toList();
+
+                return Padding(
+                  padding: EdgeInsets.only(
+                    left: 20,
+                    right: 20,
+                    top: 20,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isAr ? 'تعديل اسم قماش' : 'Edit Fabric Name',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: isAr ? 'بحث عن قماش...' : 'Search fabric...',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            searchQuery = val;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.4,
+                        ),
+                        child: filtered.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Center(
+                                  child: Text(
+                                    isAr ? 'لم يتم العثور على أقمشة' : 'No fabrics found',
+                                    style: TextStyle(color: AppTheme.textMuted),
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                shrinkWrap: true,
+                                itemCount: filtered.length,
+                                separatorBuilder: (context, index) => const Divider(height: 1),
+                                itemBuilder: (context, idx) {
+                                  final type = filtered[idx];
+                                  return ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    title: Text(
+                                      type.name,
+                                      style: TextStyle(color: AppTheme.textPrimary),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: Icon(Icons.edit_rounded, color: AppTheme.accentAmber, size: 22),
+                                      onPressed: () async {
+                                        final controller = TextEditingController(text: type.name);
+                                        final newName = await showDialog<String>(
+                                          context: context,
+                                          builder: (ctx) => AlertDialog(
+                                            title: Text(isAr ? 'تعديل الاسم' : 'Edit Name'),
+                                            content: TextField(
+                                              controller: controller,
+                                              autofocus: true,
+                                              decoration: InputDecoration(
+                                                hintText: isAr ? 'الاسم الجديد' : 'New name',
+                                              ),
+                                            ),
+                                            actions: [
+                                              TextButton(
+                                                onPressed: () => Navigator.of(ctx).pop(),
+                                                child: Text(isAr ? 'إلغاء' : 'Cancel'),
+                                              ),
+                                              ElevatedButton(
+                                                onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+                                                child: Text(isAr ? 'حفظ' : 'Save'),
+                                              ),
+                                            ],
+                                          ),
+                                        );
+                                        if (newName != null && newName.isNotEmpty && newName != type.name) {
+                                          await firestoreService.updateFabricName(type.name, newName, shopId);
+                                          setState(() {});
+                                        }
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
 
   void _showEditFabricPricePicker(BuildContext context, FirestoreService firestoreService, String shopId) {
     showModalBottomSheet(

@@ -133,7 +133,7 @@ class _FabricEntryCardState extends State<FabricEntryCard>
                       if (hasFabric) ...[
                         Text(
                           '$rollsCount ${isAr ? "لفات" : "rolls"} • '
-                          '${totalQuantity.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}${entry.unit == 'kg' ? ' kg' : ' m'} • '
+                          '${totalQuantity.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}${entry.unit == 'kg' ? ' kg' : (entry.unit == 'yard' ? ' yd' : ' m')} • '
                           '$formattedPrice $currency',
                           style: TextStyle(
                             fontSize: 13,
@@ -563,7 +563,7 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                         keyboardType: const TextInputType.numberWithOptions(decimal: true),
                         decoration: InputDecoration(
                           hintText: isAr ? 'أدخل سعر مخصص' : 'Enter custom price',
-                          suffixText: entry.unit == 'kg' ? 'DA/kg' : 'DA/m',
+                          suffixText: entry.unit == 'kg' ? 'DA/kg' : (entry.unit == 'yard' ? 'DA/yd' : 'DA/m'),
                           contentPadding: const EdgeInsets.symmetric(
                             horizontal: 16,
                             vertical: 14,
@@ -584,7 +584,7 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                 Text(
                   entry.unit == 'kg'
                       ? context.tr('kg_weight_roll')
-                      : context.tr('meters_roll_length'),
+                      : (entry.unit == 'yard' ? context.tr('yards_roll_length') : context.tr('meters_roll_length')),
                   style: TextStyle(
                     fontSize: 13,
                     fontWeight: FontWeight.w500,
@@ -862,7 +862,7 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                                       ),
                                       const SizedBox(width: 4),
                                       Text(
-                                        '${totalQuantity.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}${entry.unit == 'kg' ? ' kg' : ' m'}',
+                                        '${totalQuantity.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}${entry.unit == 'kg' ? ' kg' : (entry.unit == 'yard' ? ' yd' : ' m')}',
                                         style: TextStyle(
                                           fontSize: 14,
                                           fontWeight: FontWeight.bold,
@@ -1151,6 +1151,19 @@ class _AddFabricTypeButton extends StatelessWidget {
                     RadioListTile<String>(
                       title: Text(context.tr('kg_label')),
                       value: 'kg',
+                      groupValue: localUnit,
+                      activeColor: AppTheme.accentAmber,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setState(() {
+                          localUnit = val;
+                          validationError = null;
+                        });
+                      },
+                    ),
+                    RadioListTile<String>(
+                      title: Text(context.tr('yard_label')),
+                      value: 'yard',
                       groupValue: localUnit,
                       activeColor: AppTheme.accentAmber,
                       contentPadding: EdgeInsets.zero,

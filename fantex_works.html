@@ -978,6 +978,32 @@ function OrdersTab({ userData, db, fb }) {
   const [filter, setFilter] = useState("all");
   const [shipModal, setShipModal] = useState(null);
 
+  // Quick Order State and Refs
+  const [orderType, setOrderType] = useState("normal");
+  const [recording, setRecording] = useState(false);
+  const [paused, setPaused] = useState(false);
+  const [duration, setDuration] = useState(0);
+  const [voiceBase64, setVoiceBase64] = useState(null);
+  const [playing, setPlaying] = useState(false);
+  const [waveHeights, setWaveHeights] = useState([4, 4, 4, 4, 4, 4, 4, 4]);
+
+  const mediaRecorderRef = React.useRef(null);
+  const audioChunksRef = React.useRef([]);
+  const timerRef = React.useRef(null);
+  const audioRef = React.useRef(null);
+
+  useEffect(() => {
+    let interval;
+    if (recording && !paused) {
+      interval = setInterval(() => {
+        setWaveHeights(prev => prev.map(() => Math.floor(Math.random() * 24) + 4));
+      }, 120);
+    } else {
+      setWaveHeights([4, 4, 4, 4, 4, 4, 4, 4]);
+    }
+    return () => clearInterval(interval);
+  }, [recording, paused]);
+
   const isWH = userData?.role==="warehouse";
   const isSH = userData?.role==="shop_worker";
 
@@ -1030,6 +1056,132 @@ function OrdersTab({ userData, db, fb }) {
     } catch(e) { alert("خطأ في إنشاء الطلبية"); }
   };
 
+  const startRecording = async () => {
+    try {
+      const stream = await navigator.mediaDevices.getUserMedia({ audio: true });
+      audioChunksRef.current = [];
+      const options = { mimeType: "audio/webm" };
+      let mediaRecorder;
+      try {
+        mediaRecorder = new MediaRecorder(stream, options);
+      } catch(e) {
+        mediaRecorder = new MediaRecorder(stream);
+      }
+      
+      mediaRecorder.ondataavailable = (e) => {
+        if (e.data && e.data.size > 0) {
+          audioChunksRef.current.push(e.data);
+        }
+      };
+
+      mediaRecorder.onstop = () => {
+        const audioBlob = new Blob(audioChunksRef.current, { type: mediaRecorder.mimeType || "audio/webm" });
+        const reader = new FileReader();
+        reader.readAsDataURL(audioBlob);
+        reader.onloadend = () => {
+          const base64data = reader.result.split(',')[1];
+          setVoiceBase64(base64data);
+        };
+        stream.getTracks().forEach(track => track.stop());
+      };
+
+      mediaRecorderRef.current = mediaRecorder;
+      mediaRecorder.start(250);
+
+      setDuration(0);
+      timerRef.current = setInterval(() => {
+        setDuration(d => d + 1);
+      }, 1000);
+
+      setRecording(true);
+      setPaused(false);
+      setVoiceBase64(null);
+    } catch (e) {
+      alert("لم نتمكن من الوصول للميكروفون. يرجى إعطاء صلاحية التسجيل للمتصفح.");
+    }
+  };
+
+  const pauseRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "recording") {
+      mediaRecorderRef.current.pause();
+      setPaused(true);
+    }
+  };
+
+  const resumeRecording = () => {
+    if (mediaRecorderRef.current && mediaRecorderRef.current.state === "paused") {
+      mediaRecorderRef.current.resume();
+      setPaused(false);
+    }
+  };
+
+  const stopRecording = () => {
+    if (mediaRecorderRef.current && (mediaRecorderRef.current.state === "recording" || mediaRecorderRef.current.state === "paused")) {
+      mediaRecorderRef.current.stop();
+      clearInterval(timerRef.current);
+      setRecording(false);
+      setPaused(false);
+    }
+  };
+
+  const deleteRecording = () => {
+    if (mediaRecorderRef.current && (mediaRecorderRef.current.state === "recording" || mediaRecorderRef.current.state === "paused")) {
+      try { mediaRecorderRef.current.stop(); } catch(e){}
+    }
+    clearInterval(timerRef.current);
+    if (audioRef.current) {
+      audioRef.current.pause();
+      audioRef.current = null;
+    }
+    setRecording(false);
+    setPaused(false);
+    setVoiceBase64(null);
+    setDuration(0);
+    setPlaying(false);
+  };
+
+  const togglePlayback = () => {
+    if (!voiceBase64) return;
+    if (playing) {
+      if (audioRef.current) audioRef.current.pause();
+      setPlaying(false);
+    } else {
+      const audio = new Audio("data:audio/webm;base64," + voiceBase64);
+      audio.onended = () => setPlaying(false);
+      audioRef.current = audio;
+      audio.play().catch(e => {
+        const retryAudio = new Audio("data:audio/mp3;base64," + voiceBase64);
+        retryAudio.onended = () => setPlaying(false);
+        audioRef.current = retryAudio;
+        retryAudio.play().catch(() => {});
+      });
+      setPlaying(true);
+    }
+  };
+
+  const formatTime = (secs) => {
+    const m = Math.floor(secs / 60).toString().padStart(2, '0');
+    const s = (secs % 60).toString().padStart(2, '0');
+    return `${m}:${s}`;
+  };
+
+  const submitQuickOrder = async () => {
+    if (!voiceBase64 || !selectedWarehouse) { alert("يرجى اختيار المخزن وتحديد التسجيل أولاً"); return; }
+    try {
+      await fb.addDoc(fb.collection(db,"orders"), {
+        shopId:userData?.shopId, warehouseId:selectedWarehouse,
+        workerId:userData?.uid, workerName:userData?.name,
+        items:[], total:0, status:"pending",
+        voiceNoteBase64: voiceBase64,
+        receiptNumber:"REC-"+Date.now().toString().slice(-6),
+        createdAt:fb.serverTimestamp(),
+        isQuick: true
+      });
+      await notifyWarehouseTeam(db, fb, selectedWarehouse, `⚡ طلب سريع جديد من ${userData?.name}`, `محل: ${userData?.shopId} — طلب صوتي سريع`);
+      deleteRecording(); setSelectedWarehouse(""); setShowNew(false);
+    } catch(e) { alert("خطأ في إرسال الطلب السريع"); }
+  };
+
   // Warehouse: accept order (pending → processing)
   const acceptOrder = async (orderId) => {
     try {
@@ -1076,62 +1228,183 @@ function OrdersTab({ userData, db, fb }) {
 
       {showNew && isSH && (
         <div className="glass rounded-2xl p-6 space-y-5 slide-up">
-          <h3 className="font-bold">إنشاء طلبية جديدة</h3>
-          {/* Select warehouse */}
-          <div>
-            <label className="text-sm text-gray-400 block mb-2">📦 وجّه الطلبية إلى مخزن:</label>
-            <select value={selectedWarehouse} onChange={e=>setSelectedWarehouse(e.target.value)} className="inp">
-              <option value="">— اختر المخزن —</option>
-              {warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
-            </select>
+          <h3 className="font-bold text-lg mb-2">إنشاء طلبية جديدة</h3>
+          
+          {/* Sub-tabs selector */}
+          <div className="flex gap-2 p-1 bg-gray-900 border border-gray-800 rounded-xl max-w-xs mb-4">
+            <button type="button" onClick={() => { setOrderType("normal"); deleteRecording(); }} className={`flex-1 py-2 text-center text-xs font-semibold rounded-lg transition-all ${orderType === "normal" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`}>طلب عادي</button>
+            <button type="button" onClick={() => { setOrderType("quick"); }} className={`flex-1 py-2 text-center text-xs font-semibold rounded-lg transition-all ${orderType === "quick" ? "bg-gray-700 text-white" : "text-gray-400 hover:text-white"}`}>طلب سريع</button>
           </div>
-          {/* Select fabric */}
-          <div>
-            <label className="text-sm text-gray-400 block mb-2">🧶 اختر القماش:</label>
-            <select value={selectedFabric} onChange={e=>{setSelectedFabric(e.target.value);setQuantities({});}} className="inp">
-              <option value="">— اختر القماش —</option>
-              {fabrics.map(f=><option key={f.id} value={f.id}>{f.name} — {f.price?.toLocaleString()} د.ج</option>)}
-            </select>
-          </div>
-          {/* Colors & quantities */}
-          {selectedFab && (
-            <div>
-              <p className="text-sm text-gray-400 mb-3">🎨 اختر الألوان والكميات:</p>
-              <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
-                {selectedFab.colors?.map(c=>(
-                  <div key={c.name} className="bg-gray-900/50 rounded-xl p-3 border border-gray-800">
-                    <div className="flex items-center gap-2 mb-2">
-                      <div className="w-5 h-5 rounded-full border border-gray-700" style={{backgroundColor:c.hex}}></div>
-                      <span className="text-sm font-medium">{c.name}</span>
-                    </div>
-                    <div className="flex gap-2">
-                      <input type="number" min="1" defaultValue="1" onChange={e=>setQuantities(q=>({...q,[c.name]:Number(e.target.value)}))} className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-sm" />
-                      <button onClick={()=>addToCart(c.name,c.hex)} className="px-3 py-1 rounded-lg bg-gray-700 text-white text-sm hover:bg-gray-600 transition-all">+</button>
-                    </div>
-                  </div>
-                ))}
+
+          {orderType === "normal" ? (
+            <div className="space-y-5">
+              {/* Select warehouse */}
+              <div>
+                <label className="text-sm text-gray-400 block mb-2">📦 وجّه الطلبية إلى مخزن:</label>
+                <select value={selectedWarehouse} onChange={e=>setSelectedWarehouse(e.target.value)} className="inp">
+                  <option value="">— اختر المخزن —</option>
+                  {warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
               </div>
-            </div>
-          )}
-          {/* Cart */}
-          {cart.length>0 && (
-            <div className="space-y-2">
-              <p className="text-sm text-gray-400">عناصر الطلبية:</p>
-              {cart.map((item,i)=>(
-                <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-gray-900/50 border border-gray-800">
-                  <div className="flex items-center gap-3">
-                    <div className="w-5 h-5 rounded-full border border-gray-700" style={{backgroundColor:item.colorHex}}></div>
-                    <span className="text-sm">{item.fabricName} — {item.color} × {item.quantity}</span>
-                  </div>
-                  <div className="flex items-center gap-3">
-                    <span className="font-semibold text-sm">{item.total?.toLocaleString()} د.ج</span>
-                    <button onClick={()=>setCart(cart.filter((_,j)=>j!==i))} className="text-red-400 text-sm hover:text-red-300">✕</button>
+              {/* Select fabric */}
+              <div>
+                <label className="text-sm text-gray-400 block mb-2">🧶 اختر القماش:</label>
+                <select value={selectedFabric} onChange={e=>{setSelectedFabric(e.target.value);setQuantities({});}} className="inp">
+                  <option value="">— اختر القماش —</option>
+                  {fabrics.map(f=><option key={f.id} value={f.id}>{f.name} — {f.price?.toLocaleString()} د.ج</option>)}
+                </select>
+              </div>
+              {/* Colors & quantities */}
+              {selectedFab && (
+                <div>
+                  <p className="text-sm text-gray-400 mb-3">🎨 اختر الألوان والكميات:</p>
+                  <div className="grid grid-cols-2 md:grid-cols-3 gap-3">
+                    {selectedFab.colors?.map(c=>(
+                      <div key={c.name} className="bg-gray-900/50 rounded-xl p-3 border border-gray-800">
+                        <div className="flex items-center gap-2 mb-2">
+                          <div className="w-5 h-5 rounded-full border border-gray-700" style={{backgroundColor:c.hex}}></div>
+                          <span className="text-sm font-medium">{c.name}</span>
+                        </div>
+                        <div className="flex gap-2">
+                          <input type="number" min="1" defaultValue="1" onChange={e=>setQuantities(q=>({...q,[c.name]:Number(e.target.value)}))} className="flex-1 bg-gray-800 border border-gray-700 rounded-lg px-2 py-1 text-white text-sm" />
+                          <button onClick={()=>addToCart(c.name,c.hex)} className="px-3 py-1 rounded-lg bg-gray-700 text-white text-sm hover:bg-gray-600 transition-all">+</button>
+                        </div>
+                      </div>
+                    ))}
                   </div>
                 </div>
-              ))}
-              <div className="flex justify-between items-center pt-3 border-t border-gray-800">
-                <p className="font-bold">الإجمالي: {cart.reduce((s,i)=>s+i.total,0).toLocaleString()} د.ج</p>
-                <button onClick={submitOrder} className="shiny-btn px-8 py-3 rounded-xl text-white font-semibold relative overflow-hidden"><span className="relative z-10">إرسال الطلبية</span></button>
+              )}
+              {/* Cart */}
+              {cart.length>0 && (
+                <div className="space-y-2">
+                  <p className="text-sm text-gray-400">عناصر الطلبية:</p>
+                  {cart.map((item,i)=>(
+                    <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-gray-900/50 border border-gray-800">
+                      <div className="flex items-center gap-3">
+                        <div className="w-5 h-5 rounded-full border border-gray-700" style={{backgroundColor:item.colorHex}}></div>
+                        <span className="text-sm">{item.fabricName} — {item.color} × {item.quantity}</span>
+                      </div>
+                      <div className="flex items-center gap-3">
+                        <span className="font-semibold text-sm">{item.total?.toLocaleString()} د.ج</span>
+                        <button onClick={()=>setCart(cart.filter((_,j)=>j!==i))} className="text-red-400 text-sm hover:text-red-300">✕</button>
+                      </div>
+                    </div>
+                  ))}
+                  <div className="flex justify-between items-center pt-3 border-t border-gray-800">
+                    <p className="font-bold">الإجمالي: {cart.reduce((s,i)=>s+i.total,0).toLocaleString()} د.ج</p>
+                    <button onClick={submitOrder} className="shiny-btn px-8 py-3 rounded-xl text-white font-semibold relative overflow-hidden"><span className="relative z-10">إرسال الطلبية</span></button>
+                  </div>
+                </div>
+              )}
+            </div>
+          ) : (
+            <div className="space-y-5">
+              {/* Quick Order Select Warehouse */}
+              <div>
+                <label className="text-sm text-gray-400 block mb-2">📦 وجّه الطلب السريع إلى مخزن:</label>
+                <select value={selectedWarehouse} onChange={e=>setSelectedWarehouse(e.target.value)} className="inp">
+                  <option value="">— اختر المخزن —</option>
+                  {warehouses.map(w=><option key={w.id} value={w.id}>{w.name}</option>)}
+                </select>
+              </div>
+
+              {/* Recording view */}
+              <div className="flex flex-col items-center justify-center p-8 bg-gray-900/30 border border-gray-800 rounded-2xl space-y-6">
+                <p className={`text-sm font-medium ${recording && !paused ? 'text-red-500 animate-pulse' : 'text-gray-400'}`}>
+                  {recording ? (paused ? "⏸️ التسجيل موقوف مؤقتاً..." : "🔴 جاري التسجيل المباشر...") : (voiceBase64 ? "✅ تم تسجيل الرسالة بنجاح" : "🎙️ انقر لبدء الطلب السريع الصوتي")}
+                </p>
+
+                <div className={`audio-recorder-container ${recording ? "is-recording" : ""} ${voiceBase64 ? "has-audio" : ""}`}>
+                  <div className="controls-pill">
+                    {/* Delete Button */}
+                    <button
+                      type="button"
+                      onClick={deleteRecording}
+                      className="action-btn-rec delete-btn-rec"
+                      title="حذف"
+                    >
+                      <svg viewBox="0 0 24 24">
+                        <path d="M16 9v10H8V9h8m-1.5-6h-5l-1 1H5v2h14V4h-3.5l-1-1zM18 7H6v12c0 1.1.9 2 2 2h8c1.1 0 2-.9 2-2V7z"/>
+                      </svg>
+                    </button>
+
+                    {/* Left Waveform */}
+                    <div className="waveform-container-rec wave-left-rec">
+                      {waveHeights.slice(0, 4).map((h, i) => (
+                        <div key={i} className="bar-rec" style={{ height: `${h}px` }}></div>
+                      ))}
+                    </div>
+
+                    {/* Central Mic Button */}
+                    <button
+                      type="button"
+                      onClick={recording ? stopRecording : (voiceBase64 ? togglePlayback : startRecording)}
+                      className="mic-btn"
+                      title={recording ? "إيقاف التسجيل" : (voiceBase64 ? (playing ? "إيقاف مؤقت" : "تشغيل") : "بدء التسجيل")}
+                      style={voiceBase64 && !recording ? { background: '#16a34a', color: 'white' } : {}}
+                    >
+                      {recording ? (
+                        <svg viewBox="0 0 24 24">
+                          <path d="M6 6h12v12H6z"/>
+                        </svg>
+                      ) : (
+                        voiceBase64 ? (
+                          playing ? (
+                            <svg viewBox="0 0 24 24">
+                              <path d="M6 19h4V5H6v14zm8-14v14h4V5h-4z"/>
+                            </svg>
+                          ) : (
+                            <svg viewBox="0 0 24 24">
+                              <path d="M8 5v14l11-7z"/>
+                            </svg>
+                          )
+                        ) : (
+                          <svg viewBox="0 0 24 24">
+                            <path d="M12 14c1.66 0 3-1.34 3-3V5c0-1.66-1.34-3-3-3S9 3.34 9 5v6c0 1.66 1.34 3 3 3zm5-3c0 2.76-2.24 5-5 5s-5-2.24-5-5H5c0 3.53 2.61 6.43 6 6.92V21h2v-3.08c3.39-.49 6-3.39 6-6.92h-2z"/>
+                          </svg>
+                        )
+                      )}
+                    </button>
+
+                    {/* Right Waveform */}
+                    <div className="waveform-container-rec wave-right-rec">
+                      {waveHeights.slice(4, 8).map((h, i) => (
+                        <div key={i} className="bar-rec" style={{ height: `${h}px` }}></div>
+                      ))}
+                    </div>
+
+                    {/* Right Send Button */}
+                    <button
+                      type="button"
+                      onClick={recording ? () => { stopRecording(); } : (voiceBase64 ? submitQuickOrder : null)}
+                      disabled={!voiceBase64 && !recording}
+                      className="action-btn-rec stop-btn-rec"
+                      title="إرسال"
+                    >
+                      <svg viewBox="0 0 24 24">
+                        <path d="M2.01 21L23 12 2.01 3 2 10l15 2-15 2"/>
+                      </svg>
+                    </button>
+                  </div>
+
+                  {/* Status Area */}
+                  <div className="status-area-rec">
+                    {recording && !paused && <div className="recording-dot-rec"></div>}
+                    <div className="timer-rec">{formatTime(duration)}</div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Submit Quick Order Button (Standard) */}
+              <div className="flex justify-end pt-3 border-t border-gray-800">
+                <button
+                  type="button"
+                  disabled={!selectedWarehouse || !voiceBase64}
+                  onClick={submitQuickOrder}
+                  className="shiny-btn px-10 py-3 rounded-xl text-white font-semibold relative overflow-hidden disabled:opacity-50"
+                >
+                  <span className="relative z-10">إرسال الطلب السريع ⚡</span>
+                </button>
               </div>
             </div>
           )}

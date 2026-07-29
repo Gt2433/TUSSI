@@ -73,6 +73,22 @@ class FirestoreService {
     }
   }
 
+  /// Update the name of a fabric type for a specific shop
+  Future<void> updateFabricName(String oldName, String newName, String shopId) async {
+    final docs = await _firestore
+        .collection('fabric_types')
+        .where('shopId', isEqualTo: shopId)
+        .get();
+        
+    final targetOldName = oldName.trim().toLowerCase();
+    for (final doc in docs.docs) {
+      final docName = (doc.data()['name'] as String? ?? '').trim().toLowerCase();
+      if (docName == targetOldName) {
+        await doc.reference.update({'name': newName.trim()});
+      }
+    }
+  }
+
   // ─── Saved Lengths (Fabric-Specific Sync) ─────────────────────
 
   /// Stream all globally saved lengths (deprecated)

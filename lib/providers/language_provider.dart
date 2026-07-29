@@ -396,6 +396,12 @@ class LanguageProvider extends ChangeNotifier {
       AppLanguage.ar: 'الأمتار / طول الأسطوانة',
       AppLanguage.es: 'Metros / Longitud del rollo',
     },
+    'yards_roll_length': {
+      AppLanguage.fr: 'Yards / Longueur du rouleau',
+      AppLanguage.en: 'Yards / Roll Length',
+      AppLanguage.ar: 'اليارد / طول الأسطوانة',
+      AppLanguage.es: 'Yardas / Longitud del rollo',
+    },
     'enter_length_hint': {
       AppLanguage.fr: 'Entrez la longueur (ex: 30)',
       AppLanguage.en: 'Enter length (e.g. 30)',
@@ -599,6 +605,12 @@ class LanguageProvider extends ChangeNotifier {
       AppLanguage.en: 'Meter (m)',
       AppLanguage.ar: 'متر (m)',
       AppLanguage.es: 'Metro (m)',
+    },
+    'yard_label': {
+      AppLanguage.fr: 'Yard (Y)',
+      AppLanguage.en: 'Yard (Y)',
+      AppLanguage.ar: 'يارد (Y)',
+      AppLanguage.es: 'Yarda (Y)',
     },
     'kg_label': {
       AppLanguage.fr: 'Kilogramme (kg)',

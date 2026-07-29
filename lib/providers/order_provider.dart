@@ -117,7 +117,14 @@ class OrderProvider extends ChangeNotifier {
   }
 
   // ─── Validate the order before sending ────────────────────────
-  String? validateOrder() {
+  String? validateOrder({bool isQuickOrder = false}) {
+    if (isQuickOrder) {
+      if (_draftVoiceNoteBase64 == null || _draftVoiceNoteBase64!.isEmpty) {
+        return 'يرجى تسجيل الملاحظة الصوتية أولاً.';
+      }
+      return null;
+    }
+
     if (_fabricEntries.isEmpty) {
       return 'Add at least one fabric entry.';
     }
@@ -145,8 +152,9 @@ class OrderProvider extends ChangeNotifier {
     required String shopId,
     String? customerName,
     bool isDraft = false,
+    bool isQuickOrder = false,
   }) async {
-    final validationError = validateOrder();
+    final validationError = validateOrder(isQuickOrder: isQuickOrder);
     if (validationError != null) {
       _error = validationError;
       notifyListeners();
@@ -170,7 +178,7 @@ class OrderProvider extends ChangeNotifier {
           receiverId: rId,
           receiverName: rName,
           customerName: customerName,
-          fabrics: List.from(_fabricEntries),
+          fabrics: isQuickOrder ? [] : List.from(_fabricEntries),
           createdAt: DateTime.now(),
           status: 'pending',
           broadcastGroupId: baseId,

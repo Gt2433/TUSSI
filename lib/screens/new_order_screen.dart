@@ -1,6 +1,16 @@
+import 'dart:async';
+import 'dart:convert';
+import 'dart:io';
+import 'dart:math';
+import 'dart:typed_data';
+import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
 import 'package:intl/intl.dart';
+import 'package:record/record.dart';
+import 'package:audioplayers/audioplayers.dart';
+import 'package:path_provider/path_provider.dart';
+import 'package:http/http.dart' as http;
 import '../providers/auth_provider.dart' as app_auth;
 import '../providers/language_provider.dart';
 import '../providers/order_provider.dart';
@@ -21,9 +31,30 @@ class NewOrderScreen extends StatefulWidget {
 class _NewOrderScreenState extends State<NewOrderScreen> {
   final TextEditingController _customerNameController = TextEditingController();
 
+  // --- Quick Order Recording State variables ---
+  final AudioRecorder _quickAudioRecorder = AudioRecorder();
+  AudioPlayer? _quickAudioPlayer;
+  bool _isQuickRecording = false;
+  bool _isQuickPaused = false;
+  bool _hasQuickRecordedAudio = false;
+  bool _quickIsPlaying = false;
+  int _quickRecordDurationSec = 0;
+  Timer? _quickRecordTimer;
+  String? _quickVoicePath;
+  StreamSubscription? _quickPlayerCompleteSub;
+
   @override
   void initState() {
     super.initState();
+    _quickAudioPlayer = AudioPlayer();
+    _quickPlayerCompleteSub = _quickAudioPlayer?.onPlayerComplete.listen((_) {
+      if (mounted) {
+        setState(() {
+          _quickIsPlaying = false;
+        });
+      }
+    });
+
     // Initialize with one empty fabric entry
     WidgetsBinding.instance.addPostFrameCallback((_) {
       final provider = Provider.of<OrderProvider>(context, listen: false);
@@ -35,8 +66,213 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
   @override
   void dispose() {
+    _quickRecordTimer?.cancel();
+    _quickPlayerCompleteSub?.cancel();
+    _quickAudioRecorder.dispose();
+    _quickAudioPlayer?.dispose();
     _customerNameController.dispose();
     super.dispose();
+  }
+
+  // --- Quick Order Helper Functions ---
+
+  String _formatDuration(int seconds) {
+    final minutes = (seconds ~/ 60).toString().padLeft(2, '0');
+    final remainingSeconds = (seconds % 60).toString().padLeft(2, '0');
+    return '$minutes:$remainingSeconds';
+  }
+
+  Future<void> _startQuickRecording() async {
+    if (_isQuickRecording) return;
+    try {
+      if (await _quickAudioRecorder.hasPermission()) {
+        String path = 'temp_quick_voice_note.m4a';
+        if (!kIsWeb) {
+          final tempDir = await getTemporaryDirectory();
+          path = '${tempDir.path}/temp_quick_voice_note.m4a';
+          final file = File(path);
+          if (await file.exists()) {
+            await file.delete();
+          }
+        }
+        AudioEncoder encoder = AudioEncoder.aacLc;
+        if (kIsWeb) {
+          if (await _quickAudioRecorder.isEncoderSupported(AudioEncoder.opus)) {
+            encoder = AudioEncoder.opus;
+          } else if (await _quickAudioRecorder.isEncoderSupported(AudioEncoder.wav)) {
+            encoder = AudioEncoder.wav;
+          }
+        }
+
+        await _quickAudioRecorder.start(
+          RecordConfig(
+            encoder: encoder,
+            sampleRate: 16000,
+            numChannels: 1,
+            bitRate: 16000,
+          ),
+          path: path,
+        );
+
+        _quickRecordDurationSec = 0;
+        _quickRecordTimer = Timer.periodic(const Duration(seconds: 1), (t) {
+          if (mounted && !_isQuickPaused) {
+            setState(() {
+              _quickRecordDurationSec++;
+            });
+          }
+        });
+
+        setState(() {
+          _isQuickRecording = true;
+          _isQuickPaused = false;
+          _hasQuickRecordedAudio = false;
+          _quickVoicePath = null;
+        });
+      } else {
+        _showSnackBar('مطلوب إذن الميكروفون لتسجيل الصوت.', isError: true);
+      }
+    } catch (e) {
+      _showSnackBar('خطأ أثناء بدء التسجيل: $e', isError: true);
+    }
+  }
+
+  Future<void> _stopQuickRecording() async {
+    if (!_isQuickRecording) return;
+    _quickRecordTimer?.cancel();
+    try {
+      final path = await _quickAudioRecorder.stop();
+      setState(() {
+        _isQuickRecording = false;
+        _isQuickPaused = false;
+        _hasQuickRecordedAudio = path != null;
+        _quickVoicePath = path;
+      });
+
+      if (path != null) {
+        Uint8List bytes;
+        if (kIsWeb) {
+          final response = await http.get(Uri.parse(path));
+          bytes = response.bodyBytes;
+        } else {
+          final file = File(path);
+          if (await file.exists()) {
+            bytes = await file.readAsBytes();
+          } else {
+            return;
+          }
+        }
+        final base64String = base64Encode(bytes);
+        if (mounted) {
+          Provider.of<OrderProvider>(context, listen: false)
+              .setVoiceNoteBase64(base64String);
+        }
+      }
+    } catch (e) {
+      _showSnackBar('خطأ أثناء إيقاف التسجيل: $e', isError: true);
+    }
+  }
+
+  Future<void> _toggleQuickPause() async {
+    if (!_isQuickRecording) return;
+    try {
+      if (_isQuickPaused) {
+        await _quickAudioRecorder.resume();
+        setState(() => _isQuickPaused = false);
+      } else {
+        await _quickAudioRecorder.pause();
+        setState(() => _isQuickPaused = true);
+      }
+    } catch (e) {
+      _showSnackBar('خطأ في الإيقاف المؤقت: $e', isError: true);
+    }
+  }
+
+  Future<void> _deleteQuickRecord() async {
+    _quickRecordTimer?.cancel();
+    if (_isQuickRecording) {
+      try {
+        await _quickAudioRecorder.stop();
+      } catch (_) {}
+    }
+    if (_quickIsPlaying) {
+      try {
+        await _quickAudioPlayer?.stop();
+      } catch (_) {}
+    }
+
+    Provider.of<OrderProvider>(context, listen: false).setVoiceNoteBase64(null);
+
+    setState(() {
+      _isQuickRecording = false;
+      _isQuickPaused = false;
+      _hasQuickRecordedAudio = false;
+      _quickIsPlaying = false;
+      _quickRecordDurationSec = 0;
+      _quickVoicePath = null;
+    });
+  }
+
+  Future<void> _playPauseQuickPreview() async {
+    final base64String = Provider.of<OrderProvider>(context, listen: false).draftVoiceNoteBase64;
+    if (base64String == null || base64String.isEmpty) return;
+
+    if (_quickIsPlaying) {
+      await _quickAudioPlayer?.pause();
+      setState(() => _quickIsPlaying = false);
+    } else {
+      try {
+        final bytes = base64Decode(base64String);
+        await _quickAudioPlayer?.stop();
+        await _quickAudioPlayer?.play(BytesSource(Uint8List.fromList(bytes)));
+        setState(() => _quickIsPlaying = true);
+      } catch (e) {
+        _showSnackBar('خطأ في تشغيل الصوت: $e', isError: true);
+      }
+    }
+  }
+
+  Future<void> _sendQuickOrder() async {
+    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+    final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+
+    if (orderProvider.draftVoiceNoteBase64 == null || orderProvider.draftVoiceNoteBase64!.isEmpty) {
+      _showSnackBar('يرجى تسجيل الرسالة الصوتية أولاً.', isError: true);
+      return;
+    }
+
+    final selectedUsers = await SendOrderDialog.show(
+      context,
+      authProvider.user!.uid,
+      shopId: authProvider.appUser?.shopId ?? '',
+    );
+
+    if (selectedUsers == null || selectedUsers.isEmpty || !mounted) return;
+
+    final success = await orderProvider.sendOrder(
+      senderId: authProvider.user!.uid,
+      senderName: authProvider.displayName,
+      receiverIds: selectedUsers.map((u) => u.uid).toList(),
+      receiverNames: selectedUsers.map((u) => u.displayName).toList(),
+      shopId: authProvider.appUser?.shopId ?? '',
+      isQuickOrder: true,
+    );
+
+    if (mounted) {
+      if (success) {
+        _deleteQuickRecord();
+        final names = selectedUsers.map((u) => u.displayName).join(', ');
+        _showSnackBar(
+          '${context.tr('order_sent_to')} $names ✓',
+          isError: false,
+        );
+      } else {
+        _showSnackBar(
+          orderProvider.error ?? context.tr('failed_send'),
+          isError: true,
+        );
+      }
+    }
   }
 
   Future<void> _sendOrder() async {
@@ -175,13 +411,60 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       });
     }
 
+    return DefaultTabController(
+      length: 2,
+      child: Column(
+        children: [
+          // Custom TabBar inside NewOrderScreen to toggle between Normal and Quick Order
+          Padding(
+            padding: const EdgeInsets.fromLTRB(16, 16, 16, 8),
+            child: Container(
+              height: 48,
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceDark,
+                borderRadius: BorderRadius.circular(12),
+                border: Border.all(color: AppTheme.borderSubtle),
+              ),
+              child: TabBar(
+                indicator: BoxDecoration(
+                  color: AppTheme.accentAmber,
+                  borderRadius: BorderRadius.circular(10),
+                ),
+                indicatorSize: TabBarIndicatorSize.tab,
+                labelColor: Colors.black,
+                unselectedLabelColor: AppTheme.textSecondary,
+                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
+                tabs: [
+                  Tab(text: isAr ? 'طلب عادي' : 'Normal Order'),
+                  Tab(text: isAr ? 'طلب سريع' : 'Quick Order'),
+                ],
+              ),
+            ),
+          ),
+          Expanded(
+            child: TabBarView(
+              children: [
+                // Tab 1: Normal Order
+                _buildNormalOrderTab(context, orderProvider, isAr),
+                
+                // Tab 2: Quick Order
+                _buildQuickOrderTab(context, orderProvider, isAr),
+              ],
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildNormalOrderTab(BuildContext context, OrderProvider orderProvider, bool isAr) {
     return Stack(
       children: [
         // ─── Main Content ────────────────────────────────────
         CustomScrollView(
           slivers: [
             SliverPadding(
-              padding: const EdgeInsets.fromLTRB(16, 16, 16, 140),
+              padding: const EdgeInsets.fromLTRB(16, 8, 16, 140),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
                   // Header info
@@ -345,6 +628,293 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     );
   }
 
+  Widget _buildQuickOrderTab(BuildContext context, OrderProvider orderProvider, bool isAr) {
+    return Stack(
+      children: [
+        // Center Recording UI
+        Center(
+          child: Column(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [
+              Text(
+                _isQuickRecording
+                    ? (isAr ? 'جاري التسجيل...' : 'Recording...')
+                    : (_hasQuickRecordedAudio
+                        ? (isAr ? 'تم تسجيل الرسالة بنجاح' : 'Recording complete')
+                        : (isAr ? 'انقر على المايك لبدء الطلب السريع' : 'Tap mic to start Quick Order')),
+                style: TextStyle(
+                  fontSize: 16,
+                  color: _isQuickRecording && !_isQuickPaused
+                      ? AppTheme.error
+                      : AppTheme.textSecondary,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+              const SizedBox(height: 40),
+              
+              _buildMicAnimationPill(context, orderProvider, isAr),
+            ],
+          ),
+        ),
+        
+        // Bottom Send Button (Only shown when recording is complete)
+        if (_hasQuickRecordedAudio)
+          Positioned(
+            left: 0,
+            right: 0,
+            bottom: 0,
+            child: Container(
+              padding: const EdgeInsets.all(20),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceDark.withValues(alpha: 0.95),
+                border: Border(
+                  top: BorderSide(color: AppTheme.borderSubtle),
+                ),
+              ),
+              child: SafeArea(
+                top: false,
+                child: SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    onPressed: orderProvider.isSending ? null : _sendQuickOrder,
+                    icon: orderProvider.isSending
+                        ? SizedBox(
+                            height: 18,
+                            width: 18,
+                            child: CircularProgressIndicator(
+                              strokeWidth: 2,
+                              color: AppTheme.surfaceDark,
+                            ),
+                          )
+                        : const Icon(Icons.send_rounded, size: 18),
+                    label: Text(
+                      orderProvider.isSending
+                          ? context.tr('sending')
+                          : (isAr ? 'إرسال الطلب السريع' : 'Send Quick Order'),
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    style: ElevatedButton.styleFrom(
+                      padding: const EdgeInsets.symmetric(vertical: 16),
+                      backgroundColor: AppTheme.accentAmber,
+                      foregroundColor: Colors.black,
+                    ),
+                  ),
+                ),
+              ),
+            ),
+          ),
+      ],
+    );
+  }
+
+  Widget _buildMicAnimationPill(BuildContext context, OrderProvider orderProvider, bool isAr) {
+    final isRecording = _isQuickRecording;
+    final pillWidth = isRecording ? 320.0 : (_hasQuickRecordedAudio ? 240.0 : 75.0);
+
+    return Column(
+      mainAxisSize: MainAxisSize.min,
+      children: [
+        AnimatedContainer(
+          duration: const Duration(milliseconds: 600),
+          curve: const Cubic(0.34, 1.56, 0.64, 1),
+          width: pillWidth,
+          height: 75.0,
+          decoration: BoxDecoration(
+            color: const Color(0xFF0D0D0D),
+            borderRadius: BorderRadius.circular(40),
+            border: Border.all(color: const Color(0xFF1A1A1A)),
+            boxShadow: const [
+              BoxShadow(
+                color: Colors.black,
+                blurRadius: 35,
+                offset: Offset(0, 15),
+              ),
+            ],
+          ),
+          child: Stack(
+            alignment: Alignment.center,
+            children: [
+              // Delete Button (Left side)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 500),
+                curve: const Cubic(0.34, 1.56, 0.64, 1),
+                left: (isRecording || _hasQuickRecordedAudio) ? 15.0 : 12.5,
+                child: AnimatedScale(
+                  scale: (isRecording || _hasQuickRecordedAudio) ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: AnimatedOpacity(
+                    opacity: (isRecording || _hasQuickRecordedAudio) ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: GestureDetector(
+                      onTap: _deleteQuickRecord,
+                      child: Container(
+                        width: 45,
+                        height: 45,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1A1A1A),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.delete_outline_rounded, color: Color(0xFFFF2A2A), size: 22),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+
+              // Left Waveform (Only visible when recording)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 500),
+                curve: const Cubic(0.34, 1.56, 0.64, 1),
+                left: isRecording ? 72.0 : 12.5,
+                child: AnimatedOpacity(
+                  opacity: isRecording ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: WaveBar(isRecording: isRecording && !_isQuickPaused),
+                ),
+              ),
+
+              // Center Action Button (Mic / Stop / Play-Pause)
+              GestureDetector(
+                onTap: () {
+                  if (isRecording) {
+                    _stopQuickRecording();
+                  } else if (_hasQuickRecordedAudio) {
+                    _playPauseQuickPreview();
+                  } else {
+                    _startQuickRecording();
+                  }
+                },
+                child: AnimatedContainer(
+                  duration: const Duration(milliseconds: 300),
+                  width: 65,
+                  height: 65,
+                  decoration: BoxDecoration(
+                    shape: BoxShape.circle,
+                    color: isRecording 
+                        ? const Color(0xFFFF2A2A) 
+                        : (_hasQuickRecordedAudio ? const Color(0xFF10B981) : Colors.white),
+                    gradient: isRecording
+                        ? const LinearGradient(
+                            colors: [Color(0xFFFF2A2A), Color(0xFFD10000)],
+                            begin: Alignment.topLeft,
+                            end: Alignment.bottomRight,
+                          )
+                        : null,
+                    boxShadow: [
+                      if (isRecording)
+                        BoxShadow(
+                          color: const Color(0xFFFF2A2A).withOpacity(0.5),
+                          blurRadius: 25,
+                          spreadRadius: 2,
+                        )
+                      else if (_hasQuickRecordedAudio && _quickIsPlaying)
+                        BoxShadow(
+                          color: const Color(0xFF10B981).withOpacity(0.5),
+                          blurRadius: 25,
+                          spreadRadius: 2,
+                        )
+                      else
+                        BoxShadow(
+                          color: Colors.white.withOpacity(0.1),
+                          blurRadius: 15,
+                          offset: const Offset(0, 5),
+                        ),
+                    ],
+                  ),
+                  child: Icon(
+                    isRecording 
+                        ? Icons.stop_rounded 
+                        : (_hasQuickRecordedAudio 
+                            ? (_quickIsPlaying ? Icons.pause_rounded : Icons.play_arrow_rounded) 
+                            : Icons.mic_rounded),
+                    color: isRecording || _hasQuickRecordedAudio ? Colors.white : Colors.black,
+                    size: 32,
+                  ),
+                ),
+              ),
+
+              // Right Waveform (Only visible when recording)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 500),
+                curve: const Cubic(0.34, 1.56, 0.64, 1),
+                right: isRecording ? 72.0 : 12.5,
+                child: AnimatedOpacity(
+                  opacity: isRecording ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: WaveBar(isRecording: isRecording && !_isQuickPaused),
+                ),
+              ),
+
+              // Send/Action Button (Right side)
+              AnimatedPositioned(
+                duration: const Duration(milliseconds: 500),
+                curve: const Cubic(0.34, 1.56, 0.64, 1),
+                right: (isRecording || _hasQuickRecordedAudio) ? 15.0 : 12.5,
+                child: AnimatedScale(
+                  scale: (isRecording || _hasQuickRecordedAudio) ? 1.0 : 0.0,
+                  duration: const Duration(milliseconds: 300),
+                  child: AnimatedOpacity(
+                    opacity: (isRecording || _hasQuickRecordedAudio) ? 1.0 : 0.0,
+                    duration: const Duration(milliseconds: 300),
+                    child: GestureDetector(
+                      onTap: () {
+                        if (isRecording) {
+                          _stopQuickRecording().then((_) {
+                            _sendQuickOrder();
+                          });
+                        } else if (_hasQuickRecordedAudio) {
+                          _sendQuickOrder();
+                        }
+                      },
+                      child: Container(
+                        width: 45,
+                        height: 45,
+                        decoration: const BoxDecoration(
+                          color: Color(0xFF1A1A1A),
+                          shape: BoxShape.circle,
+                        ),
+                        child: const Icon(Icons.send_rounded, color: Colors.white, size: 20),
+                      ),
+                    ),
+                  ),
+                ),
+              ),
+            ],
+          ),
+        ),
+
+        // Status Area (Dot + Timer)
+        AnimatedSize(
+          duration: const Duration(milliseconds: 400),
+          child: (isRecording || _hasQuickRecordedAudio)
+              ? Padding(
+                  padding: const EdgeInsets.only(top: 24.0),
+                  child: Row(
+                    mainAxisAlignment: MainAxisAlignment.center,
+                    children: [
+                      if (isRecording && !_isQuickPaused) ...[
+                        const BlinkDot(),
+                        const SizedBox(width: 8),
+                      ],
+                      Text(
+                        _formatDuration(_quickRecordDurationSec),
+                        style: const TextStyle(
+                          color: Color(0xFFE0E0E0),
+                          fontSize: 22,
+                          fontFamily: 'Courier New',
+                          fontWeight: FontWeight.bold,
+                          letterSpacing: 2,
+                        ),
+                      ),
+                    ],
+                  ),
+                )
+              : const SizedBox.shrink(),
+        ),
+      ],
+    );
+  }
+
   Widget _buildOrderSummaryCard(BuildContext context, OrderProvider orderProvider) {
     final fabricEntries = orderProvider.fabricEntries;
     final grandTotalRolls = fabricEntries.fold<int>(0, (sum, entry) => sum + entry.sequence.length);
@@ -355,6 +925,10 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
     final totalKgs = fabricEntries
         .where((e) => e.unit == 'kg')
+        .fold<double>(0.0, (sum, e) => sum + e.sequence.fold<double>(0.0, (s, val) => s + val));
+
+    final totalYards = fabricEntries
+        .where((e) => e.unit == 'yard')
         .fold<double>(0.0, (sum, e) => sum + e.sequence.fold<double>(0.0, (s, val) => s + val));
 
     final grandTotalPrice = fabricEntries.fold<double>(
@@ -370,16 +944,17 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     final currency = isAr ? 'د.ج' : 'DA';
 
     // Build the quantity text
-    String qtyText = '';
-    if (totalMeters > 0 && totalKgs > 0) {
-      qtyText = '${totalMeters.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} m + ${totalKgs.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} kg';
-    } else if (totalMeters > 0) {
-      qtyText = '${totalMeters.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} m';
-    } else if (totalKgs > 0) {
-      qtyText = '${totalKgs.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} kg';
-    } else {
-      qtyText = '0';
+    List<String> qtyParts = [];
+    if (totalMeters > 0) {
+      qtyParts.add('${totalMeters.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} m');
     }
+    if (totalKgs > 0) {
+      qtyParts.add('${totalKgs.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} kg');
+    }
+    if (totalYards > 0) {
+      qtyParts.add('${totalYards.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} yd');
+    }
+    String qtyText = qtyParts.isEmpty ? '0' : qtyParts.join(' + ');
 
     return Card(
       margin: EdgeInsets.zero,
@@ -550,6 +1125,10 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
         .where((e) => e.unit == 'kg')
         .fold<double>(0.0, (sum, e) => sum + e.sequence.fold<double>(0.0, (s, val) => s + val));
 
+    final totalYards = fabricEntries
+        .where((e) => e.unit == 'yard')
+        .fold<double>(0.0, (sum, e) => sum + e.sequence.fold<double>(0.0, (s, val) => s + val));
+
     final grandTotalPrice = fabricEntries.fold<double>(
       0.0,
       (sum, entry) {
@@ -625,6 +1204,8 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                           _buildMetricCol(isAr ? 'المجموع (م)' : 'Total (m)', '${totalMeters.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} m', Icons.straighten_rounded),
                         if (totalKgs > 0)
                           _buildMetricCol(isAr ? 'المجموع (كغ)' : 'Total (kg)', '${totalKgs.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} kg', Icons.scale_rounded),
+                        if (totalYards > 0)
+                          _buildMetricCol(isAr ? 'المجموع (يارد)' : 'Total (yd)', '${totalYards.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} yd', Icons.straighten_rounded),
                       ],
                     ),
                   ),
@@ -798,6 +1379,119 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
         ),
       ],
+    );
+  }
+}
+
+class WaveBar extends StatefulWidget {
+  final bool isRecording;
+  const WaveBar({super.key, required this.isRecording});
+
+  @override
+  State<WaveBar> createState() => _WaveBarState();
+}
+
+class _WaveBarState extends State<WaveBar> {
+  final List<double> _heights = [4.0, 4.0, 4.0, 4.0];
+  Timer? _timer;
+  final _random = Random();
+
+  @override
+  void initState() {
+    super.initState();
+    if (widget.isRecording) {
+      _startAnim();
+    }
+  }
+
+  void _startAnim() {
+    _timer = Timer.periodic(const Duration(milliseconds: 120), (t) {
+      if (mounted) {
+        setState(() {
+          for (int i = 0; i < 4; i++) {
+            _heights[i] = _random.nextDouble() * 24.0 + 4.0;
+          }
+        });
+      }
+    });
+  }
+
+  @override
+  void didUpdateWidget(WaveBar oldWidget) {
+    super.didUpdateWidget(oldWidget);
+    if (widget.isRecording && !oldWidget.isRecording) {
+      _startAnim();
+    } else if (!widget.isRecording && oldWidget.isRecording) {
+      _timer?.cancel();
+      setState(() {
+        _heights.fillRange(0, 4, 4.0);
+      });
+    }
+  }
+
+  @override
+  void dispose() {
+    _timer?.cancel();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return Row(
+      mainAxisSize: MainAxisSize.min,
+      children: _heights.map((h) {
+        return AnimatedContainer(
+          duration: const Duration(milliseconds: 100),
+          width: 4,
+          height: h,
+          margin: const EdgeInsets.symmetric(horizontal: 2),
+          decoration: BoxDecoration(
+            color: const Color(0xFFFF2A2A),
+            borderRadius: BorderRadius.circular(2),
+          ),
+        );
+      }).toList(),
+    );
+  }
+}
+
+class BlinkDot extends StatefulWidget {
+  const BlinkDot({super.key});
+
+  @override
+  State<BlinkDot> createState() => _BlinkDotState();
+}
+
+class _BlinkDotState extends State<BlinkDot> with SingleTickerProviderStateMixin {
+  late AnimationController _controller;
+
+  @override
+  void initState() {
+    super.initState();
+    _controller = AnimationController(
+      vsync: this,
+      duration: const Duration(seconds: 1),
+    )..repeat(reverse: true);
+  }
+
+  @override
+  void dispose() {
+    _controller.dispose();
+    super.dispose();
+  }
+
+  @override
+  Widget build(BuildContext context) {
+    return FadeTransition(
+      opacity: Tween<double>(begin: 0.3, end: 1.0).animate(_controller),
+      child: Container(
+        width: 8,
+        height: 8,
+        decoration: const BoxDecoration(
+          color: Color(0xFFFF2A2A),
+          shape: BoxShape.circle,
+        ),
+      ),
     );
   }
 }
