@@ -1,6 +1,6 @@
 {
   "hosting": {
-    "site": "fantex",
+    "site": "tussi",
     "public": "build/web",
     "ignore": [
       "firebase.json",

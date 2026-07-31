@@ -1,4 +1,5 @@
 import 'package:flutter/material.dart';
+import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
 import 'package:provider/provider.dart';
 import 'package:url_launcher/url_launcher.dart';
@@ -12,12 +13,13 @@ import '../services/firestore_service.dart';
 import '../models/order_model.dart';
 import 'super_admin_screen.dart';
 import '../models/user_model.dart';
+import 'help_guide_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   final bool isTab;
   const SettingsScreen({super.key, this.isTab = false});
 
-  static const String _kCurrentVersion = '2.1.1';
+  static const String _kCurrentVersion = '3.0.0';
 
   // ─── Show "About App" Dialog ──────────────────────────────────
   void _showAboutDialog(BuildContext context) {
@@ -167,7 +169,7 @@ class SettingsScreen extends StatelessWidget {
         child: FutureBuilder<DocumentSnapshot>(
           future: FirebaseFirestore.instance.collection('app_updates').doc('latest').get(),
           builder: (context, snapshot) {
-            String apkUrl = 'https://fantex.web.app';
+            String apkUrl = 'https://tussi.web.app';
             if (snapshot.hasData && snapshot.data != null && snapshot.data!.exists) {
               final data = snapshot.data!.data() as Map<String, dynamic>?;
               apkUrl = data?['url'] as String? ?? apkUrl;
@@ -273,6 +275,148 @@ class SettingsScreen extends StatelessWidget {
               ),
             );
           },
+        ),
+      ),
+    );
+  }
+
+  // ─── Show Shop QR Code & Join Code Modal ──────────────────────
+  void _showShopQRCodeModal(BuildContext context, String shopName, String shopCode) {
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+    final qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${Uri.encodeComponent(shopCode)}';
+
+    showDialog(
+      context: context,
+      builder: (dialogCtx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: AppTheme.surfaceCard,
+        child: Padding(
+          padding: const EdgeInsets.all(24),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber, size: 32),
+              ),
+              const SizedBox(height: 12),
+              Text(
+                shopName,
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 4),
+              Text(
+                isAr ? 'كود الانضمام للمحل (دعوة العمال)' : 'Shop Join Code (Invite Workers)',
+                style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 16),
+
+              // Code Display Chip with Copy Button
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceElevated,
+                  borderRadius: BorderRadius.circular(14),
+                  border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.4), width: 1.5),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    Text(
+                      shopCode,
+                      style: TextStyle(
+                        fontSize: 22,
+                        fontWeight: FontWeight.w900,
+                        letterSpacing: 2,
+                        color: AppTheme.accentAmber,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    InkWell(
+                      onTap: () {
+                        Clipboard.setData(ClipboardData(text: shopCode));
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(content: Text(isAr ? 'تم نسخ كود المحل ✓' : 'Shop code copied ✓')),
+                        );
+                      },
+                      child: Container(
+                        padding: const EdgeInsets.all(6),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentAmber.withValues(alpha: 0.2),
+                          borderRadius: BorderRadius.circular(8),
+                        ),
+                        child: Icon(Icons.copy_rounded, size: 16, color: AppTheme.accentAmber),
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // QR Code Image
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: Colors.white,
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                child: Image.network(
+                  qrUrl,
+                  width: 180,
+                  height: 180,
+                  loadingBuilder: (context, child, loadingProgress) {
+                    if (loadingProgress == null) return child;
+                    return const SizedBox(
+                      width: 180, height: 180,
+                      child: Center(child: CircularProgressIndicator()),
+                    );
+                  },
+                  errorBuilder: (context, error, stackTrace) => Container(
+                    width: 180, height: 180,
+                    color: AppTheme.surfaceDark,
+                    child: const Icon(Icons.qr_code_2_rounded, size: 64, color: Colors.white54),
+                  ),
+                ),
+              ),
+              const SizedBox(height: 20),
+
+              // Share Button
+              SizedBox(
+                width: double.infinity,
+                child: ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accentAmber,
+                    foregroundColor: AppTheme.surfaceDark,
+                    padding: const EdgeInsets.symmetric(vertical: 14),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.share_rounded),
+                  label: Text(
+                    isAr ? 'مشاركة كود المحل عبر WhatsApp' : 'Share Shop Code via WhatsApp',
+                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () async {
+                    Navigator.of(dialogCtx).pop();
+                    final message = isAr
+                        ? 'مرحباً، للانضمام إلى محل ($shopName) على تطبيق TUSSI، استخدم كود الانضمام التالي عند التسجيل:\n\n👉 *$shopCode*\n\nرابط تحميل التطبيق: https://tussi.web.app'
+                        : 'Hello, to join ($shopName) on the TUSSI app, use this shop join code when registering:\n\n👉 *$shopCode*\n\nApp link: https://tussi.web.app';
+                    await SharePlus.instance.share(ShareParams(text: message));
+                  },
+                ),
+              ),
+              const SizedBox(height: 8),
+              TextButton(
+                onPressed: () => Navigator.of(dialogCtx).pop(),
+                child: Text(isAr ? 'إغلاق' : 'Close', style: TextStyle(color: AppTheme.textMuted)),
+              ),
+            ],
+          ),
         ),
       ),
     );
@@ -427,6 +571,95 @@ class SettingsScreen extends StatelessWidget {
               },
             ),
 
+            // ─── Group 0: Shop Info & Worker Invite ───────────────
+            if (shopId.isNotEmpty) ...[
+              Text(
+                isAr ? 'بيانات المحل ودعوة العمال' : 'Shop Details & Worker Invite',
+                style: TextStyle(
+                  fontSize: 13,
+                  fontWeight: FontWeight.bold,
+                  color: AppTheme.accentAmber,
+                  letterSpacing: 0.5,
+                ),
+              ),
+              const SizedBox(height: 10),
+              StreamBuilder<Map<String, dynamic>?>(
+                stream: firestoreService.streamShopDetails(shopId),
+                builder: (context, snapshot) {
+                  final shopData = snapshot.data;
+                  final shopName = shopData?['name'] as String? ?? (isAr ? 'المحل' : 'My Shop');
+                  final shopCode = shopData?['shopCode'] as String? ?? 'SHOP-0000';
+
+                  return Container(
+                    margin: const EdgeInsets.only(bottom: 24),
+                    padding: const EdgeInsets.all(18),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceCard,
+                      borderRadius: BorderRadius.circular(22),
+                      border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.3)),
+                    ),
+                    child: Column(
+                      children: [
+                        Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(10),
+                              decoration: BoxDecoration(
+                                color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(14),
+                              ),
+                              child: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber, size: 24),
+                            ),
+                            const SizedBox(width: 14),
+                            Expanded(
+                              child: Column(
+                                crossAxisAlignment: CrossAxisAlignment.start,
+                                children: [
+                                  Text(
+                                    shopName,
+                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                                  ),
+                                  const SizedBox(height: 2),
+                                  Row(
+                                    children: [
+                                      Text(
+                                        '${isAr ? "كود الانضمام" : "Code"}: ',
+                                        style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                                      ),
+                                      Text(
+                                        shopCode,
+                                        style: TextStyle(
+                                          fontSize: 13,
+                                          fontWeight: FontWeight.bold,
+                                          color: AppTheme.accentAmber,
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                ],
+                              ),
+                            ),
+                            ElevatedButton.icon(
+                              onPressed: () => _showShopQRCodeModal(context, shopName, shopCode),
+                              icon: const Icon(Icons.qr_code_rounded, size: 16),
+                              label: Text(isAr ? 'رمز QR' : 'QR Code'),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.accentAmber,
+                                foregroundColor: Colors.black,
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                          ],
+                        ),
+                      ],
+                    ),
+                  );
+                },
+              ),
+            ],
+
             // ─── Group 1: Appearance & Language ─────────────────
             Text(
               isAr ? 'المظهر واللغة' : 'Appearance & Language',
@@ -446,106 +679,286 @@ class SettingsScreen extends StatelessWidget {
               ),
               child: Column(
                 children: [
-                  // Dark Mode Tile
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                    leading: Icon(
-                      themeProvider.isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
-                      color: AppTheme.accentAmber,
-                    ),
-                    title: Text(
-                      context.tr('dark_mode'),
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                    ),
-                    subtitle: Text(
-                      themeProvider.isDarkMode ? context.tr('enabled') : context.tr('disabled'),
-                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                    ),
-                    trailing: Switch(
-                      value: themeProvider.isDarkMode,
-                      activeColor: AppTheme.accentAmber,
-                      onChanged: (value) => themeProvider.toggleTheme(value),
+                  Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      iconColor: AppTheme.accentAmber,
+                      collapsedIconColor: AppTheme.textMuted,
+                      leading: Icon(
+                        themeProvider.isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                        color: AppTheme.accentAmber,
+                      ),
+                      title: Text(
+                        isAr ? 'إعدادات المظهر والسمة' : 'Theme & Appearance Settings',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      subtitle: Text(
+                        isAr
+                            ? (themeProvider.useSmartTheme ? 'الوضع التلقائي مفعل' : (themeProvider.isDarkMode ? 'الوضع الداكن مفعل' : 'الوضع المضيء مفعل'))
+                            : (themeProvider.useSmartTheme ? 'Smart Auto Active' : (themeProvider.isDarkMode ? 'Dark Mode Active' : 'Light Mode Active')),
+                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                      ),
+                      children: [
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+                          leading: Icon(
+                            themeProvider.isDarkMode ? Icons.dark_mode_rounded : Icons.light_mode_rounded,
+                            color: AppTheme.accentAmber,
+                            size: 20,
+                          ),
+                          title: Text(
+                            context.tr('dark_mode'),
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                          ),
+                          trailing: Switch(
+                            value: themeProvider.isDarkMode,
+                            activeColor: AppTheme.accentAmber,
+                            onChanged: (value) => themeProvider.toggleTheme(value),
+                          ),
+                        ),
+                        ListTile(
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 2),
+                          leading: Icon(
+                            Icons.schedule_rounded,
+                            color: AppTheme.accentAmber,
+                            size: 20,
+                          ),
+                          title: Text(
+                            isAr ? 'الوضع الذكي التلقائي' : 'Smart Auto Mode',
+                            style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 14),
+                          ),
+                          trailing: Switch(
+                            value: themeProvider.useSmartTheme,
+                            activeColor: AppTheme.accentAmber,
+                            onChanged: (value) => themeProvider.setUseSmartTheme(value),
+                          ),
+                        ),
+                        if (themeProvider.useSmartTheme) ...[
+                          Padding(
+                            padding: const EdgeInsets.only(left: 20, right: 20, bottom: 16, top: 4),
+                            child: Row(
+                              children: [
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () async {
+                                      final time = await showTimePicker(
+                                        context: context,
+                                        initialTime: themeProvider.lightStartTime,
+                                      );
+                                      if (time != null) {
+                                        themeProvider.setLightStartTime(time);
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.surfaceElevated,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: AppTheme.borderSubtle),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            isAr ? 'بدء المضيء ☀️' : 'Light starts ☀️',
+                                            style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            themeProvider.lightStartTime.format(context),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                                const SizedBox(width: 12),
+                                Expanded(
+                                  child: InkWell(
+                                    onTap: () async {
+                                      final time = await showTimePicker(
+                                        context: context,
+                                        initialTime: themeProvider.darkStartTime,
+                                      );
+                                      if (time != null) {
+                                        themeProvider.setDarkStartTime(time);
+                                      }
+                                    },
+                                    borderRadius: BorderRadius.circular(12),
+                                    child: Container(
+                                      padding: const EdgeInsets.all(12),
+                                      decoration: BoxDecoration(
+                                        color: AppTheme.surfaceElevated,
+                                        borderRadius: BorderRadius.circular(12),
+                                        border: Border.all(color: AppTheme.borderSubtle),
+                                      ),
+                                      child: Column(
+                                        crossAxisAlignment: CrossAxisAlignment.start,
+                                        children: [
+                                          Text(
+                                            isAr ? 'بدء المظلم 🌙' : 'Dark starts 🌙',
+                                            style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                                          ),
+                                          const SizedBox(height: 4),
+                                          Text(
+                                            themeProvider.darkStartTime.format(context),
+                                            style: const TextStyle(
+                                              fontSize: 14,
+                                              fontWeight: FontWeight.bold,
+                                            ),
+                                          ),
+                                        ],
+                                      ),
+                                    ),
+                                  ),
+                                ),
+                              ],
+                            ),
+                          ),
+                        ],
+                      ],
                     ),
                   ),
                   const Divider(height: 1, indent: 20, endIndent: 20),
-                  // Language Selection Header/Info
-                  ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                    leading: Icon(Icons.translate_rounded, color: AppTheme.accentAmber),
-                    title: Text(
-                      context.tr('language'),
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                    ),
-                  ),
-                  Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 20),
-                    child: Column(
+                  Theme(
+                    data: Theme.of(context).copyWith(dividerColor: Colors.transparent),
+                    child: ExpansionTile(
+                      iconColor: AppTheme.accentAmber,
+                      collapsedIconColor: AppTheme.textMuted,
+                      leading: Icon(Icons.translate_rounded, color: AppTheme.accentAmber),
+                      title: Text(
+                        isAr ? 'إعدادات اللغة' : 'Language Settings',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      subtitle: Text(
+                        _getLanguageName(languageProvider.language),
+                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                      ),
                       children: [
-                        _buildLanguageOption(
-                          context,
-                          languageProvider,
-                          lang: AppLanguage.fr,
-                          title: 'Français (Base)',
-                          subtitle: 'French',
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Column(
+                            children: [
+                              _buildLanguageOption(
+                                context,
+                                languageProvider,
+                                lang: AppLanguage.fr,
+                                title: 'Français',
+                                subtitle: isAr ? 'الفرنسية' : 'French',
+                              ),
+                              const Divider(height: 1),
+                              _buildLanguageOption(
+                                context,
+                                languageProvider,
+                                lang: AppLanguage.en,
+                                title: 'English',
+                                subtitle: isAr ? 'الإنجليزية' : 'English',
+                              ),
+                              const Divider(height: 1),
+                              _buildLanguageOption(
+                                context,
+                                languageProvider,
+                                lang: AppLanguage.ar,
+                                title: 'العربية',
+                                subtitle: isAr ? 'العربية' : 'Arabic',
+                              ),
+                              const Divider(height: 1),
+                              _buildLanguageOption(
+                                context,
+                                languageProvider,
+                                lang: AppLanguage.es,
+                                title: 'Español',
+                                subtitle: isAr ? 'الإسبانية' : 'Spanish',
+                              ),
+                              const Divider(height: 1),
+                              _buildLanguageOption(
+                                context,
+                                languageProvider,
+                                lang: AppLanguage.zh,
+                                title: '中文 (Chinese)',
+                                subtitle: isAr ? 'الصينية' : 'Chinese',
+                              ),
+                            ],
+                          ),
                         ),
-                        const Divider(height: 1),
-                        _buildLanguageOption(
-                          context,
-                          languageProvider,
-                          lang: AppLanguage.en,
-                          title: 'English',
-                          subtitle: 'الإنجليزية',
-                        ),
-                        const Divider(height: 1),
-                        _buildLanguageOption(
-                          context,
-                          languageProvider,
-                          lang: AppLanguage.ar,
-                          title: 'العربية',
-                          subtitle: 'Arabic',
-                        ),
-                        const Divider(height: 1),
-                        _buildLanguageOption(
-                          context,
-                          languageProvider,
-                          lang: AppLanguage.es,
-                          title: 'Español',
-                          subtitle: 'Spanish',
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: ElevatedButton.icon(
+                              onPressed: () async {
+                                await languageProvider.saveLanguage();
+                                if (context.mounted) {
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(context.tr('settings_saved')),
+                                      backgroundColor: AppTheme.successSurface,
+                                      behavior: SnackBarBehavior.floating,
+                                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                    ),
+                                  );
+                                }
+                              },
+                              icon: const Icon(Icons.save_rounded, size: 18),
+                              label: Text(context.tr('save_settings')),
+                              style: ElevatedButton.styleFrom(
+                                backgroundColor: AppTheme.accentAmber,
+                                foregroundColor: AppTheme.surfaceDark,
+                                padding: const EdgeInsets.symmetric(vertical: 14),
+                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                              ),
+                            ),
+                          ),
                         ),
                       ],
                     ),
                   ),
-                  const SizedBox(height: 16),
-                  Padding(
-                    padding: const EdgeInsets.only(left: 20, right: 20, bottom: 20),
-                    child: SizedBox(
-                      width: double.infinity,
-                      child: ElevatedButton.icon(
-                        onPressed: () async {
-                          await languageProvider.saveLanguage();
-                          if (context.mounted) {
-                            ScaffoldMessenger.of(context).showSnackBar(
-                              SnackBar(
-                                content: Text(context.tr('settings_saved')),
-                                backgroundColor: AppTheme.successSurface,
-                                behavior: SnackBarBehavior.floating,
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                              ),
-                            );
-                          }
-                        },
-                        icon: const Icon(Icons.save_rounded, size: 18),
-                        label: Text(context.tr('save_settings')),
-                        style: ElevatedButton.styleFrom(
-                          backgroundColor: AppTheme.accentAmber,
-                          foregroundColor: AppTheme.surfaceDark,
-                          padding: const EdgeInsets.symmetric(vertical: 12),
-                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                        ),
-                      ),
-                    ),
-                  ),
                 ],
+              ),
+            ),
+            const SizedBox(height: 16),
+
+            // ─── Help & Guide Tile ──────────────────────────────
+            Container(
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceCard,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppTheme.borderSubtle),
+              ),
+              child: ListTile(
+                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                leading: Icon(
+                  Icons.help_outline_rounded,
+                  color: AppTheme.accentAmber,
+                ),
+                title: Text(
+                  isAr ? 'دليل الاستخدام والتعليمات' : 'User Guide & Instructions',
+                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                ),
+                subtitle: Text(
+                  isAr
+                      ? 'شرح تفاعلي بالصور لكافة أزرار ومميزات التطبيق'
+                      : 'Interactive visual guide for all app buttons & features',
+                  style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                ),
+                trailing: Icon(
+                  Icons.arrow_forward_ios_rounded,
+                  color: AppTheme.textMuted,
+                  size: 14,
+                ),
+                onTap: () {
+                  Navigator.of(context).push(
+                    MaterialPageRoute(
+                      builder: (context) => const HelpGuideScreen(),
+                    ),
+                  );
+                },
               ),
             ),
             const SizedBox(height: 32),
@@ -768,6 +1181,18 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 16),
               ListTile(
+                leading: Icon(Icons.add_circle_outline_rounded, color: AppTheme.accentAmber),
+                title: Text(
+                  isAr ? 'إضافة قماش جديد' : 'Add New Fabric',
+                  style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _showAddFabricDialog(context, firestoreService, shopId);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
                 leading: Icon(Icons.drive_file_rename_outline_rounded, color: AppTheme.accentAmber),
                 title: Text(
                   isAr ? 'تعديل اسم القماش' : 'Edit Fabric Name',
@@ -821,6 +1246,182 @@ class SettingsScreen extends StatelessWidget {
     );
   }
 
+  void _showAddFabricDialog(BuildContext context, FirestoreService firestoreService, String shopId) {
+    final dialogNameController = TextEditingController();
+    final dialogPriceController = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (ctx) {
+        String? localUnit;
+        String? validationError;
+        final isAr = ctx.tr('tab_orders') == 'الطلبيات';
+
+        return StatefulBuilder(
+          builder: (context, setState) {
+            return AlertDialog(
+              title: Text(context.tr('add_new_fabric_type')),
+              content: SingleChildScrollView(
+                child: Column(
+                  mainAxisSize: MainAxisSize.min,
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    TextField(
+                      controller: dialogNameController,
+                      autofocus: true,
+                      decoration: InputDecoration(
+                        hintText: context.tr('fabric_type_name'),
+                      ),
+                      onChanged: (_) {
+                        if (validationError != null) {
+                          setState(() {
+                            validationError = null;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 16),
+                    TextField(
+                      controller: dialogPriceController,
+                      keyboardType: const TextInputType.numberWithOptions(decimal: true),
+                      decoration: InputDecoration(
+                        hintText: context.tr('fabric_price'),
+                      ),
+                      onChanged: (_) {
+                        if (validationError != null) {
+                          setState(() {
+                            validationError = null;
+                          });
+                        }
+                      },
+                    ),
+                    const SizedBox(height: 18),
+                    Text(
+                      context.tr('unit_choice'),
+                      style: TextStyle(
+                        fontSize: 14,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
+                      ),
+                    ),
+                    const SizedBox(height: 8),
+                    RadioListTile<String>(
+                      title: Text(context.tr('meter_label')),
+                      value: 'meter',
+                      groupValue: localUnit,
+                      activeColor: AppTheme.accentAmber,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setState(() {
+                          localUnit = val;
+                          validationError = null;
+                        });
+                      },
+                    ),
+                    RadioListTile<String>(
+                      title: Text(context.tr('kg_label')),
+                      value: 'kg',
+                      groupValue: localUnit,
+                      activeColor: AppTheme.accentAmber,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setState(() {
+                          localUnit = val;
+                          validationError = null;
+                        });
+                      },
+                    ),
+                    RadioListTile<String>(
+                      title: Text(context.tr('yard_label')),
+                      value: 'yard',
+                      groupValue: localUnit,
+                      activeColor: AppTheme.accentAmber,
+                      contentPadding: EdgeInsets.zero,
+                      onChanged: (val) {
+                        setState(() {
+                          localUnit = val;
+                          validationError = null;
+                        });
+                      },
+                    ),
+                    if (validationError != null) ...[
+                      const SizedBox(height: 10),
+                      Text(
+                        validationError!,
+                        style: TextStyle(
+                          color: AppTheme.error,
+                          fontSize: 12,
+                          fontWeight: FontWeight.w500,
+                        ),
+                      ),
+                    ],
+                  ],
+                ),
+              ),
+              actions: [
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(context.tr('cancel')),
+                ),
+                ElevatedButton(
+                  onPressed: () async {
+                    final name = dialogNameController.text.trim();
+                    final priceText = dialogPriceController.text.trim();
+                    if (name.isEmpty) {
+                      setState(() {
+                        validationError = context.tr('fabric_name_required');
+                      });
+                      return;
+                    }
+                    if (priceText.isEmpty) {
+                      setState(() {
+                        validationError = context.tr('fabric_price_required');
+                      });
+                      return;
+                    }
+                    final price = double.tryParse(priceText);
+                    if (price == null || price <= 0) {
+                      setState(() {
+                        validationError = context.tr('invalid_price');
+                      });
+                      return;
+                    }
+                    if (localUnit == null) {
+                      setState(() {
+                        validationError = context.tr('required_unit');
+                      });
+                      return;
+                    }
+                    
+                    try {
+                      await firestoreService.addFabricType(name, localUnit!, price, shopId);
+                      if (context.mounted) {
+                        Navigator.of(ctx).pop();
+                        ScaffoldMessenger.of(context).showSnackBar(
+                          SnackBar(
+                            content: Text(isAr ? 'تم إضافة القماش الجديد بنجاح ✓' : 'New fabric added successfully ✓'),
+                            backgroundColor: AppTheme.successSurface,
+                            behavior: SnackBarBehavior.floating,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                        );
+                      }
+                    } catch (e) {
+                      setState(() {
+                        validationError = isAr ? 'حدث خطأ أثناء الإضافة' : 'Error adding fabric: $e';
+                      });
+                    }
+                  },
+                  child: Text(context.tr('add')),
+                ),
+              ],
+            );
+          },
+        );
+      },
+    );
+  }
+
   void _showEditFabricNamePicker(BuildContext context, FirestoreService firestoreService, String shopId) {
     showModalBottomSheet(
       context: context,
@@ -840,7 +1441,7 @@ class SettingsScreen extends StatelessWidget {
             return StatefulBuilder(
               builder: (context, setState) {
                 final filtered = fabrics.where((type) {
-                  return type.name.toLowerCase().contains(searchQuery.toLowerCase());
+                  return AppTheme.matchesFuzzy(searchQuery, type.name);
                 }).toList();
 
                 return Padding(
@@ -978,7 +1579,7 @@ class SettingsScreen extends StatelessWidget {
             return StatefulBuilder(
               builder: (context, setState) {
                 final filtered = fabrics.where((type) {
-                  return type.name.toLowerCase().contains(searchQuery.toLowerCase());
+                  return AppTheme.matchesFuzzy(searchQuery, type.name);
                 }).toList();
 
                 return Padding(
@@ -1142,7 +1743,7 @@ class SettingsScreen extends StatelessWidget {
             return StatefulBuilder(
               builder: (context, setState) {
                 final filtered = fabrics.where((type) {
-                  return type.name.toLowerCase().contains(searchQuery.toLowerCase());
+                  return AppTheme.matchesFuzzy(searchQuery, type.name);
                 }).toList();
 
                 return Padding(
@@ -1293,7 +1894,7 @@ class SettingsScreen extends StatelessWidget {
                 builder: (context, snapshot) {
                   final fabrics = snapshot.data ?? [];
                   final filteredFabrics = fabrics.where((type) {
-                    return type.name.toLowerCase().contains(searchQuery.toLowerCase());
+                    return AppTheme.matchesFuzzy(searchQuery, type.name);
                   }).toList();
 
                   return Padding(
@@ -1520,6 +2121,21 @@ class SettingsScreen extends StatelessWidget {
         );
       },
     );
+  }
+
+  String _getLanguageName(AppLanguage lang) {
+    switch (lang) {
+      case AppLanguage.fr:
+        return 'Français';
+      case AppLanguage.en:
+        return 'English';
+      case AppLanguage.ar:
+        return 'العربية';
+      case AppLanguage.es:
+        return 'Español';
+      case AppLanguage.zh:
+        return '中文 (Chinese)';
+    }
   }
 
   Widget _buildLanguageOption(
@@ -1867,12 +2483,6 @@ class SettingsScreen extends StatelessWidget {
                             final user = users[index];
                             final name = user.displayName;
                             final email = user.email;
-                            final role = user.role ?? 'shop_employee';
-
-                            String roleText = isAr ? 'موظف' : 'Employee';
-                            if (role == 'shop_admin') {
-                              roleText = isAr ? 'مدير المحل' : 'Shop Admin';
-                            }
 
                             return Container(
                               padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
@@ -1885,14 +2495,10 @@ class SettingsScreen extends StatelessWidget {
                                 children: [
                                   CircleAvatar(
                                     radius: 18,
-                                    backgroundColor: role == 'shop_admin'
-                                        ? AppTheme.accentAmber.withValues(alpha: 0.15)
-                                        : AppTheme.textMuted.withValues(alpha: 0.1),
+                                    backgroundColor: AppTheme.textMuted.withValues(alpha: 0.1),
                                     child: Icon(
-                                      role == 'shop_admin'
-                                          ? Icons.person_rounded
-                                          : Icons.person_outline_rounded,
-                                      color: role == 'shop_admin' ? AppTheme.accentAmber : AppTheme.textMuted,
+                                      Icons.person_rounded,
+                                      color: AppTheme.textMuted,
                                       size: 20,
                                     ),
                                   ),
@@ -1916,25 +2522,6 @@ class SettingsScreen extends StatelessWidget {
                                           ),
                                         ),
                                       ],
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
-                                    decoration: BoxDecoration(
-                                      color: role == 'shop_admin'
-                                          ? AppTheme.accentAmber.withValues(alpha: 0.15)
-                                          : AppTheme.borderSubtle.withValues(alpha: 0.3),
-                                      borderRadius: BorderRadius.circular(10),
-                                    ),
-                                    child: Text(
-                                      roleText,
-                                      style: TextStyle(
-                                        color: role == 'shop_admin'
-                                            ? AppTheme.accentAmber
-                                            : AppTheme.textSecondary,
-                                        fontSize: 10,
-                                        fontWeight: FontWeight.bold,
-                                      ),
                                     ),
                                   ),
                                 ],

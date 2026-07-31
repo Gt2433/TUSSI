@@ -189,6 +189,113 @@ class AuthProvider extends ChangeNotifier {
     }
   }
 
+  // ─── Free Sign Up: Create New Shop ─────────────────────────────
+  Future<bool> signUpCreateShop({
+    required String email,
+    required String password,
+    required String displayName,
+    required String shopName,
+    String? photoBase64,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    UserCredential? credential;
+    try {
+      credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      final user = credential.user;
+      if (user == null) throw Exception('تعذر إنشاء حساب المستخدم');
+      final uid = user.uid;
+      await user.updateDisplayName(displayName.trim());
+
+      await _firestoreService.createNewShop(
+        shopName: shopName,
+        ownerUid: uid,
+        ownerEmail: email,
+        ownerName: displayName,
+        password: password,
+        photoBase64: photoBase64,
+      );
+
+      _user = user;
+      _displayName = displayName.trim();
+      _appUser = await _authService.getUserData(uid);
+      _error = null;
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _error = _mapAuthError(e.code);
+      return false;
+    } catch (e) {
+      if (credential != null && credential.user != null) {
+        try { await credential.user!.delete(); } catch (_) {}
+      }
+      _error = 'حدث خطأ أثناء إنشاء المحل: $e';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ─── Free Sign Up: Join Shop By Code ───────────────────────────
+  Future<bool> signUpJoinShop({
+    required String email,
+    required String password,
+    required String displayName,
+    required String shopCode,
+    String? photoBase64,
+  }) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    UserCredential? credential;
+    try {
+      credential = await FirebaseAuth.instance.createUserWithEmailAndPassword(
+        email: email.trim(),
+        password: password,
+      );
+
+      final user = credential.user;
+      if (user == null) throw Exception('تعذر إنشاء حساب المستخدم');
+      final uid = user.uid;
+      await user.updateDisplayName(displayName.trim());
+
+      await _firestoreService.joinShopByCode(
+        shopCode: shopCode,
+        userUid: uid,
+        userEmail: email,
+        userName: displayName,
+        password: password,
+        photoBase64: photoBase64,
+      );
+
+      _user = user;
+      _displayName = displayName.trim();
+      _appUser = await _authService.getUserData(uid);
+      _error = null;
+      return true;
+    } on FirebaseAuthException catch (e) {
+      _error = _mapAuthError(e.code);
+      return false;
+    } catch (e) {
+      if (credential != null && credential.user != null) {
+        try { await credential.user!.delete(); } catch (_) {}
+      }
+      _error = 'حدث خطأ أثناء الانضمام للمحل: ${e.toString().replaceAll("Exception: ", "")}';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+
   // ─── Sign Out ─────────────────────────────────────────────────
   Future<void> signOut() async {
     await _authService.signOut();
@@ -343,7 +450,7 @@ class AuthProvider extends ChangeNotifier {
   }
 
   // ─── Sign In with Google ──────────────────────────────────────
-  Future<String?> signInWithGoogle({String? activationCode}) async {
+  Future<String?> signInWithGoogle() async {
     _isLoading = true;
     _error = null;
     notifyListeners();
@@ -362,9 +469,6 @@ class AuthProvider extends ChangeNotifier {
       }
 
       final uid = currentUser!.uid;
-      final email = currentUser.email ?? '';
-      final displayName = currentUser.displayName ?? 'User';
-      final photoBase64 = currentUser.photoURL != null ? await _fetchBase64Image(currentUser.photoURL!) : null;
 
       final dbUser = await _authService.getUserData(uid);
       if (dbUser != null) {
@@ -377,75 +481,126 @@ class AuthProvider extends ChangeNotifier {
         return 'success';
       }
 
-      if (activationCode == null || activationCode.trim().isEmpty) {
-        _user = currentUser;
-        _isLoading = false;
-        notifyListeners();
-        return 'need-activation-code';
-      }
-
-      final code = activationCode.trim();
-      final codeDoc = await _firestoreService.checkActivationCode(code);
-
-      if (codeDoc != null) {
-        final codeData = codeDoc.data() as Map<String, dynamic>?;
-        final shopName = (codeData?['shopName'] as String?) ?? displayName;
-
-        await _firestoreService.registerShopAndAdmin(
-          activationCode: code,
-          adminUid: uid,
-          adminEmail: email,
-          adminName: displayName,
-          shopName: shopName,
-          password: 'google_sign_in',
-        );
-
-        _user = currentUser;
-        _displayName = displayName;
-        _appUser = await _authService.getUserData(uid);
-        _isLoading = false;
-        notifyListeners();
-        return 'success';
-      }
-
-      final shopDoc = await _firestoreService.checkInviteCode(code);
-      if (shopDoc != null) {
-        await _firestoreService.registerEmployee(
-          inviteCode: code,
-          employeeUid: uid,
-          employeeEmail: email,
-          employeeName: displayName,
-          password: 'google_sign_in',
-          photoBase64: photoBase64,
-        );
-
-        _user = currentUser;
-        _displayName = displayName;
-        _appUser = await _authService.getUserData(uid);
-        _isLoading = false;
-        notifyListeners();
-        return 'success';
-      }
-
-      await currentUser.delete();
-      await _authService.signOut();
-      _user = null;
-      _appUser = null;
-      _error = 'كود التفعيل أو كود الدعوة غير صالح.';
+      _user = currentUser;
       _isLoading = false;
       notifyListeners();
-      return 'invalid-code';
-
-    } on FirebaseAuthException catch (e) {
-      _error = _mapAuthError(e.code);
-      _isLoading = false;
-      notifyListeners();
-      return 'error';
+      return 'need-shop-setup';
     } catch (e) {
-      _error = 'حدث خطأ أثناء تسجيل الدخول باستخدام Google: $e';
+      _error = 'حدث خطأ أثناء الدخول عبر Google: $e';
       _isLoading = false;
       notifyListeners();
-      return 'error';
+      return null;
+    }
+  }
+
+  // ─── Google Sign Up: Create New Shop ───────────────────────────
+  Future<bool> signInWithGoogleCreateShop({required String shopName}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      User? currentUser = _user;
+      if (currentUser == null) {
+        final credential = await _authService.signInWithGoogle();
+        if (credential == null || credential.user == null) {
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+        currentUser = credential.user;
+      }
+
+      final uid = currentUser!.uid;
+      final email = currentUser.email ?? '';
+      final displayName = currentUser.displayName ?? shopName;
+      final photoBase64 = currentUser.photoURL != null ? await _fetchBase64Image(currentUser.photoURL!) : null;
+
+      final dbUser = await _authService.getUserData(uid);
+      if (dbUser != null) {
+        _user = currentUser;
+        _appUser = dbUser;
+        _displayName = dbUser.displayName;
+        await FcmService().updateToken(uid);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      await _firestoreService.createNewShop(
+        shopName: shopName,
+        ownerUid: uid,
+        ownerEmail: email,
+        ownerName: displayName,
+        password: 'google_sign_in',
+        photoBase64: photoBase64,
+      );
+
+      _user = currentUser;
+      _displayName = displayName;
+      _appUser = await _authService.getUserData(uid);
+      _error = null;
+      return true;
+    } catch (e) {
+      _error = 'حدث خطأ أثناء إنشاء المحل عبر Google: $e';
+      return false;
+    } finally {
+      _isLoading = false;
+      notifyListeners();
+    }
+  }
+
+  // ─── Google Sign Up: Join Shop By Code ────────────────────────
+  Future<bool> signInWithGoogleJoinShop({required String shopCode}) async {
+    _isLoading = true;
+    _error = null;
+    notifyListeners();
+
+    try {
+      User? currentUser = _user;
+      if (currentUser == null) {
+        final credential = await _authService.signInWithGoogle();
+        if (credential == null || credential.user == null) {
+          _isLoading = false;
+          notifyListeners();
+          return false;
+        }
+        currentUser = credential.user;
+      }
+
+      final uid = currentUser!.uid;
+      final email = currentUser.email ?? '';
+      final displayName = currentUser.displayName ?? 'Worker';
+      final photoBase64 = currentUser.photoURL != null ? await _fetchBase64Image(currentUser.photoURL!) : null;
+
+      final dbUser = await _authService.getUserData(uid);
+      if (dbUser != null) {
+        _user = currentUser;
+        _appUser = dbUser;
+        _displayName = dbUser.displayName;
+        await FcmService().updateToken(uid);
+        _isLoading = false;
+        notifyListeners();
+        return true;
+      }
+
+      await _firestoreService.joinShopByCode(
+        shopCode: shopCode,
+        userUid: uid,
+        userEmail: email,
+        userName: displayName,
+        password: 'google_sign_in',
+        photoBase64: photoBase64,
+      );
+
+      _user = currentUser;
+      _displayName = displayName;
+      _appUser = await _authService.getUserData(uid);
+      _error = null;
+      return true;
+    } catch (e) {
+      _error = 'حدث خطأ أثناء الانضمام عبر Google: ${e.toString().replaceAll("Exception: ", "")}';
+      return false;
     }
   }
 

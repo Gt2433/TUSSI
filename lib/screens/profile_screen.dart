@@ -35,142 +35,287 @@ class ProfileScreen extends StatelessWidget {
     final email = appUser?.email ?? authProvider.user?.email ?? '';
     final passwordText = _maskPassword(appUser?.password);
     final photoBase64 = appUser?.photoBase64;
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
 
     return SingleChildScrollView(
-      padding: const EdgeInsets.all(24),
+      padding: const EdgeInsets.fromLTRB(20, 16, 20, 36),
       child: Column(
         children: [
-          const SizedBox(height: 16),
-          // ─── Profile Picture / Avatar ─────────────────────────
-          Center(
-            child: GestureDetector(
-              onTap: authProvider.isPhotoLoading
-                  ? null
-                  : () => _updatePhoto(context, authProvider),
-              child: Stack(
-                children: [
-                  Container(
-                    padding: const EdgeInsets.all(4),
-                    decoration: BoxDecoration(
-                      shape: BoxShape.circle,
-                      border: Border.all(
-                        color: AppTheme.accentAmber.withValues(alpha: 0.3),
-                        width: 2.5,
+          // ─── Top Header Card ───────────────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 16),
+            decoration: BoxDecoration(
+              gradient: LinearGradient(
+                colors: [
+                  AppTheme.accentAmber.withValues(alpha: 0.12),
+                  AppTheme.surfaceElevated,
+                ],
+                begin: Alignment.topLeft,
+                end: Alignment.bottomRight,
+              ),
+              borderRadius: BorderRadius.circular(22),
+              border: Border.all(
+                color: AppTheme.accentAmber.withValues(alpha: 0.3),
+              ),
+              boxShadow: [
+                BoxShadow(
+                  color: AppTheme.accentAmber.withValues(alpha: 0.1),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentAmber.withValues(alpha: 0.18),
+                    borderRadius: BorderRadius.circular(14),
+                  ),
+                  child: Icon(
+                    Icons.person_rounded,
+                    color: AppTheme.accentAmber,
+                    size: 24,
+                  ),
+                ),
+                const SizedBox(width: 14),
+                Expanded(
+                  child: Column(
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Text(
+                        context.tr('tab_profile'),
+                        style: TextStyle(
+                          color: AppTheme.textPrimary,
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
                       ),
-                    ),
-                    child: Stack(
-                      alignment: Alignment.center,
-                      children: [
-                        CircleAvatar(
-                          radius: 60,
+                      const SizedBox(height: 2),
+                      Text(
+                        context.tr('user_account'),
+                        style: TextStyle(
+                          color: AppTheme.textMuted,
+                          fontSize: 12,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 5),
+                  decoration: BoxDecoration(
+                    color: AppTheme.success.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(20),
+                    border: Border.all(color: AppTheme.success.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.check_circle_rounded, size: 14, color: AppTheme.success),
+                      const SizedBox(width: 4),
+                      Text(
+                        isAr ? 'نشط' : 'Active',
+                        style: TextStyle(
+                          fontSize: 11,
+                          fontWeight: FontWeight.bold,
+                          color: AppTheme.success,
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 24),
+
+          // ─── Profile Picture Card ──────────────────────────────────
+          Container(
+            width: double.infinity,
+            padding: const EdgeInsets.symmetric(vertical: 24, horizontal: 20),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceCard,
+              borderRadius: BorderRadius.circular(24),
+              border: Border.all(color: AppTheme.borderSubtle),
+              boxShadow: [
+                BoxShadow(
+                  color: Colors.black.withValues(alpha: 0.15),
+                  blurRadius: 20,
+                  offset: const Offset(0, 8),
+                ),
+              ],
+            ),
+            child: Column(
+              children: [
+                // Avatar with glowing ring
+                GestureDetector(
+                  onTap: authProvider.isPhotoLoading
+                      ? null
+                      : () => _updatePhoto(context, authProvider),
+                  child: Stack(
+                    alignment: Alignment.center,
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(4),
+                        decoration: BoxDecoration(
+                          shape: BoxShape.circle,
+                          gradient: SweepGradient(
+                            colors: [
+                              AppTheme.accentAmber,
+                              AppTheme.accentAmberLight,
+                              AppTheme.accentAmber,
+                            ],
+                          ),
+                          boxShadow: [
+                            BoxShadow(
+                              color: AppTheme.accentAmber.withValues(alpha: 0.35),
+                              blurRadius: 16,
+                              spreadRadius: 2,
+                            ),
+                          ],
+                        ),
+                        child: CircleAvatar(
+                          radius: 54,
                           backgroundColor: AppTheme.surfaceElevated,
-                          backgroundImage: photoBase64 != null &&
-                                  photoBase64.isNotEmpty &&
-                                  !authProvider.isPhotoLoading
-                              ? MemoryImage(base64Decode(photoBase64))
-                              : null,
-                          child: (photoBase64 == null ||
-                                      photoBase64.isEmpty) &&
+                          backgroundImage:
+                              photoBase64 != null &&
+                                      photoBase64.isNotEmpty &&
+                                      !authProvider.isPhotoLoading
+                                  ? MemoryImage(base64Decode(photoBase64))
+                                  : null,
+                          child: (photoBase64 == null || photoBase64.isEmpty) &&
                                   !authProvider.isPhotoLoading
                               ? Text(
                                   displayName.isNotEmpty
                                       ? displayName[0].toUpperCase()
                                       : '?',
                                   style: TextStyle(
-                                    fontSize: 40,
+                                    fontSize: 38,
                                     fontWeight: FontWeight.bold,
                                     color: AppTheme.accentAmber,
                                   ),
                                 )
                               : null,
                         ),
-                        if (authProvider.isPhotoLoading)
-                          Positioned.fill(
-                            child: Container(
-                              decoration: const BoxDecoration(
-                                color: Colors.black45,
-                                shape: BoxShape.circle,
-                              ),
-                              child: Center(
-                                child: CircularProgressIndicator(
-                                  color: AppTheme.accentAmber,
-                                ),
+                      ),
+                      if (authProvider.isPhotoLoading)
+                        Positioned.fill(
+                          child: Container(
+                            decoration: const BoxDecoration(
+                              color: Colors.black54,
+                              shape: BoxShape.circle,
+                            ),
+                            child: Center(
+                              child: CircularProgressIndicator(
+                                color: AppTheme.accentAmber,
                               ),
                             ),
                           ),
-                      ],
-                    ),
-                  ),
-                  Positioned(
-                    bottom: 4,
-                    right: 4,
-                    child: Container(
-                      padding: const EdgeInsets.all(8),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accentAmber,
-                        shape: BoxShape.circle,
-                        border:
-                            Border.all(color: AppTheme.surfaceCard, width: 2),
+                        ),
+                      Positioned(
+                        bottom: 2,
+                        right: 2,
+                        child: Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentAmber,
+                            shape: BoxShape.circle,
+                            border: Border.all(
+                              color: AppTheme.surfaceCard,
+                              width: 2.5,
+                            ),
+                          ),
+                          child: Icon(
+                            authProvider.isPhotoLoading
+                                ? Icons.hourglass_empty_rounded
+                                : Icons.camera_alt_rounded,
+                            size: 16,
+                            color: AppTheme.surfaceDark,
+                          ),
+                        ),
                       ),
-                      child: Icon(
-                        authProvider.isPhotoLoading
-                            ? Icons.hourglass_empty_rounded
-                            : Icons.edit_rounded,
-                        size: 18,
-                        color: AppTheme.surfaceDark,
-                      ),
-                    ),
+                    ],
                   ),
-                ],
-              ),
-            ),
-          ),
-          const SizedBox(height: 16),
+                ),
+                const SizedBox(height: 14),
 
-          // ─── Display Name & Role/Subtitle ─────────────────────
-          Text(
-            displayName,
-            style: const TextStyle(
-              fontSize: 22,
-              fontWeight: FontWeight.w700,
-            ),
-          ),
-          const SizedBox(height: 6),
-          Text(
-            context.tr('user_account'),
-            style: TextStyle(
-              fontSize: 13,
-              color: AppTheme.textSecondary,
-              letterSpacing: 0.5,
-            ),
-          ),
-          const SizedBox(height: 36),
+                // Display Name & Email
+                Text(
+                  displayName,
+                  style: const TextStyle(
+                    fontSize: 22,
+                    fontWeight: FontWeight.bold,
+                    letterSpacing: -0.3,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  email,
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textMuted,
+                  ),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 20),
 
-          // ─── User Information Cards ────────────────────────────
+                // ─── Quick Actions Row (ترتيب جديد للأزرار) ───────────
+                Wrap(
+                  alignment: WrapAlignment.center,
+                  spacing: 8,
+                  runSpacing: 8,
+                  children: [
+                    _buildQuickActionButton(
+                      icon: Icons.edit_rounded,
+                      label: isAr ? 'تعديل الاسم' : 'Edit Name',
+                      onTap: () => _showEditNameDialog(context, authProvider, displayName),
+                    ),
+                    _buildQuickActionButton(
+                      icon: Icons.lock_outline_rounded,
+                      label: isAr ? 'كلمة المرور' : 'Password',
+                      onTap: () => _showEditPasswordDialog(context, authProvider),
+                    ),
+                    _buildQuickActionButton(
+                      icon: Icons.photo_camera_outlined,
+                      label: isAr ? 'الصورة' : 'Photo',
+                      onTap: () => _updatePhoto(context, authProvider),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+          const SizedBox(height: 20),
+
+          // ─── Account Info Details Card ─────────────────────────────
           Container(
-            padding: const EdgeInsets.all(20),
             decoration: BoxDecoration(
               color: AppTheme.surfaceCard,
-              borderRadius: BorderRadius.circular(20),
+              borderRadius: BorderRadius.circular(22),
               border: Border.all(color: AppTheme.borderSubtle),
             ),
             child: Column(
               children: [
                 _buildInfoRow(
-                  icon: Icons.person_rounded,
+                  icon: Icons.person_outline_rounded,
                   label: context.tr('full_name'),
                   value: displayName,
-                  onEdit: () => _showEditNameDialog(context, authProvider, displayName),
+                  onEdit: () =>
+                      _showEditNameDialog(context, authProvider, displayName),
                 ),
-                const Divider(height: 32),
+                Divider(height: 1, indent: 64, endIndent: 16, color: AppTheme.borderSubtle),
                 _buildInfoRow(
-                  icon: Icons.email_rounded,
+                  icon: Icons.email_outlined,
                   label: context.tr('email'),
                   value: email,
                 ),
-                const Divider(height: 32),
+                Divider(height: 1, indent: 64, endIndent: 16, color: AppTheme.borderSubtle),
                 _buildInfoRow(
-                  icon: Icons.lock_rounded,
+                  icon: Icons.lock_outline_rounded,
                   label: context.tr('password'),
                   value: passwordText,
                   isPassword: true,
@@ -179,60 +324,92 @@ class ProfileScreen extends StatelessWidget {
               ],
             ),
           ),
-          const SizedBox(height: 20),
+          const SizedBox(height: 28),
 
-          // ─── Logout Button ─────────────────────────────────────
+          // ─── Reordered Bottom Actions (Sign Out & Delete Account) ────
+          // 1. Sign Out Button (Primary Red Accent)
           SizedBox(
             width: double.infinity,
-            child: OutlinedButton.icon(
+            child: ElevatedButton.icon(
               onPressed: () => _showSignOutDialog(context, authProvider),
-              icon: Icon(
-                Icons.logout_rounded,
-                color: AppTheme.error,
-              ),
-              label: Text(
-                context.tr('sign_out'),
-                style: TextStyle(
-                  color: AppTheme.error,
-                  fontSize: 16,
-                  fontWeight: FontWeight.w700,
-                ),
-              ),
-              style: OutlinedButton.styleFrom(
+              icon: const Icon(Icons.logout_rounded, size: 20),
+              label: Text(context.tr('sign_out')),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.error.withValues(alpha: 0.15),
+                foregroundColor: AppTheme.error,
                 padding: const EdgeInsets.symmetric(vertical: 16),
+                elevation: 0,
                 side: BorderSide(
                   color: AppTheme.error.withValues(alpha: 0.4),
                   width: 1.5,
                 ),
                 shape: RoundedRectangleBorder(
-                  borderRadius: BorderRadius.circular(14),
+                  borderRadius: BorderRadius.circular(16),
+                ),
+                textStyle: const TextStyle(
+                  fontSize: 15,
+                  fontWeight: FontWeight.bold,
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 16),
+          const SizedBox(height: 12),
 
-          // ─── Delete Account Button ──────────────────────────────
+          // 2. Delete Account Button (Secondary/Warning Text Button)
           SizedBox(
             width: double.infinity,
             child: TextButton.icon(
               onPressed: () => _showDeleteAccountDialog(context, authProvider),
               icon: Icon(
-                Icons.delete_forever_rounded,
-                color: AppTheme.error,
+                Icons.delete_forever_outlined,
+                color: AppTheme.textMuted,
+                size: 18,
               ),
               label: Text(
                 context.tr('delete_account'),
                 style: TextStyle(
-                  color: AppTheme.error,
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
+                  color: AppTheme.textMuted,
+                  fontSize: 13,
+                  fontWeight: FontWeight.w500,
                 ),
               ),
             ),
           ),
-          const SizedBox(height: 24),
         ],
+      ),
+    );
+  }
+
+  Widget _buildQuickActionButton({
+    required IconData icon,
+    required String label,
+    required VoidCallback onTap,
+  }) {
+    return InkWell(
+      onTap: onTap,
+      borderRadius: BorderRadius.circular(14),
+      child: Container(
+        padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+        decoration: BoxDecoration(
+          color: AppTheme.surfaceElevated,
+          borderRadius: BorderRadius.circular(14),
+          border: Border.all(color: AppTheme.borderSubtle),
+        ),
+        child: Row(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Icon(icon, size: 14, color: AppTheme.accentAmber),
+            const SizedBox(width: 6),
+            Text(
+              label,
+              style: TextStyle(
+                fontSize: 12,
+                fontWeight: FontWeight.w600,
+                color: AppTheme.textPrimary,
+              ),
+            ),
+          ],
+        ),
       ),
     );
   }
@@ -244,60 +421,67 @@ class ProfileScreen extends StatelessWidget {
     bool isPassword = false,
     VoidCallback? onEdit,
   }) {
-    return Row(
-      children: [
-        Container(
-          padding: const EdgeInsets.all(10),
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceElevated,
-            borderRadius: BorderRadius.circular(12),
-          ),
-          child: Icon(
-            icon,
-            color: isPassword ? AppTheme.error : AppTheme.accentAmber,
-            size: 22,
-          ),
-        ),
-        const SizedBox(width: 16),
-        Expanded(
-          child: Column(
-            crossAxisAlignment: CrossAxisAlignment.start,
-            children: [
-              Text(
-                label,
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                value,
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.w600,
-                  color: AppTheme.textPrimary,
-                  letterSpacing: isPassword ? 2 : 0,
-                ),
-              ),
-            ],
-          ),
-        ),
-        if (onEdit != null)
-          IconButton(
-            icon: Icon(
-              Icons.edit_outlined,
-              color: AppTheme.textSecondary,
-              size: 20,
+    return Padding(
+      padding: const EdgeInsets.fromLTRB(20, 16, 12, 16),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(10),
+            decoration: BoxDecoration(
+              color: AppTheme.surfaceElevated,
+              borderRadius: BorderRadius.circular(12),
             ),
-            onPressed: onEdit,
+            child: Icon(
+              icon,
+              color: isPassword ? AppTheme.error : AppTheme.accentAmber,
+              size: 22,
+            ),
           ),
-      ],
+          const SizedBox(width: 16),
+          Expanded(
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  label,
+                  style: TextStyle(
+                    fontSize: 12,
+                    color: AppTheme.textSecondary,
+                    fontWeight: FontWeight.w500,
+                  ),
+                ),
+                const SizedBox(height: 4),
+                Text(
+                  value,
+                  style: TextStyle(
+                    fontSize: 15,
+                    fontWeight: FontWeight.w600,
+                    color: AppTheme.textPrimary,
+                    letterSpacing: isPassword ? 2 : 0,
+                  ),
+                ),
+              ],
+            ),
+          ),
+          if (onEdit != null)
+            IconButton(
+              icon: Icon(
+                Icons.edit_outlined,
+                color: AppTheme.textSecondary,
+                size: 20,
+              ),
+              onPressed: onEdit,
+            ),
+        ],
+      ),
     );
   }
 
-  void _showEditNameDialog(BuildContext context, AuthProvider authProvider, String currentName) {
+  void _showEditNameDialog(
+    BuildContext context,
+    AuthProvider authProvider,
+    String currentName,
+  ) {
     final controller = TextEditingController(text: currentName);
     showDialog(
       context: context,
@@ -305,9 +489,7 @@ class ProfileScreen extends StatelessWidget {
         title: Text(context.tr('edit_name')),
         content: TextField(
           controller: controller,
-          decoration: InputDecoration(
-            hintText: context.tr('enter_name'),
-          ),
+          decoration: InputDecoration(hintText: context.tr('enter_name')),
           autofocus: true,
         ),
         actions: [
@@ -320,23 +502,26 @@ class ProfileScreen extends StatelessWidget {
               final newName = controller.text.trim();
               if (newName.isNotEmpty) {
                 Navigator.of(ctx).pop();
-                
+
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (loadingCtx) => const Center(child: CircularProgressIndicator()),
+                  builder: (loadingCtx) =>
+                      const Center(child: CircularProgressIndicator()),
                 );
-                
+
                 final success = await authProvider.updateDisplayName(newName);
-                
+
                 if (context.mounted) {
                   Navigator.of(context).pop();
                 }
-                
+
                 if (success) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(context.tr('name_update_success'))),
+                      SnackBar(
+                        content: Text(context.tr('name_update_success')),
+                      ),
                     );
                   }
                 } else {
@@ -358,7 +543,10 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  void _showEditPasswordDialog(BuildContext context, AuthProvider authProvider) {
+  void _showEditPasswordDialog(
+    BuildContext context,
+    AuthProvider authProvider,
+  ) {
     final controller = TextEditingController();
     showDialog(
       context: context,
@@ -382,30 +570,35 @@ class ProfileScreen extends StatelessWidget {
               final newPassword = controller.text;
               if (newPassword.length >= 6) {
                 Navigator.of(ctx).pop();
-                
+
                 showDialog(
                   context: context,
                   barrierDismissible: false,
-                  builder: (loadingCtx) => const Center(child: CircularProgressIndicator()),
+                  builder: (loadingCtx) =>
+                      const Center(child: CircularProgressIndicator()),
                 );
-                
+
                 final success = await authProvider.updatePassword(newPassword);
-                
+
                 if (context.mounted) {
                   Navigator.of(context).pop();
                 }
-                
+
                 if (success) {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
-                      SnackBar(content: Text(context.tr('password_update_success'))),
+                      SnackBar(
+                        content: Text(context.tr('password_update_success')),
+                      ),
                     );
                   }
                 } else {
                   if (context.mounted) {
                     ScaffoldMessenger.of(context).showSnackBar(
                       SnackBar(
-                        content: Text(authProvider.error ?? 'فشل تغيير كلمة المرور'),
+                        content: Text(
+                          authProvider.error ?? 'فشل تغيير كلمة المرور',
+                        ),
                         backgroundColor: AppTheme.error,
                       ),
                     );
@@ -443,9 +636,7 @@ class ProfileScreen extends StatelessWidget {
               Navigator.of(ctx).pop();
               authProvider.signOut();
             },
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.error,
-            ),
+            style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
             child: Text(context.tr('logout')),
           ),
         ],
@@ -453,7 +644,10 @@ class ProfileScreen extends StatelessWidget {
     );
   }
 
-  Future<void> _updatePhoto(BuildContext context, AuthProvider authProvider) async {
+  Future<void> _updatePhoto(
+    BuildContext context,
+    AuthProvider authProvider,
+  ) async {
     try {
       if (!context.mounted) return;
 
@@ -473,7 +667,10 @@ class ProfileScreen extends StatelessWidget {
                 crossAxisAlignment: CrossAxisAlignment.start,
                 children: [
                   Padding(
-                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                    padding: const EdgeInsets.symmetric(
+                      horizontal: 12,
+                      vertical: 8,
+                    ),
                     child: Text(
                       ctx.tr('select_image_source'),
                       style: const TextStyle(
@@ -491,9 +688,18 @@ class ProfileScreen extends StatelessWidget {
                         color: AppTheme.accentAmber.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(Icons.camera_alt_rounded, color: AppTheme.accentAmber),
+                      child: Icon(
+                        Icons.camera_alt_rounded,
+                        color: AppTheme.accentAmber,
+                      ),
                     ),
-                    title: Text(ctx.tr('camera'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    title: Text(
+                      ctx.tr('camera'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     onTap: () => Navigator.of(ctx).pop(ImageSource.camera),
                   ),
                   const SizedBox(height: 8),
@@ -504,9 +710,18 @@ class ProfileScreen extends StatelessWidget {
                         color: AppTheme.accentAmber.withValues(alpha: 0.12),
                         borderRadius: BorderRadius.circular(10),
                       ),
-                      child: Icon(Icons.photo_library_rounded, color: AppTheme.accentAmber),
+                      child: Icon(
+                        Icons.photo_library_rounded,
+                        color: AppTheme.accentAmber,
+                      ),
                     ),
-                    title: Text(ctx.tr('gallery'), style: const TextStyle(fontSize: 16, fontWeight: FontWeight.w600)),
+                    title: Text(
+                      ctx.tr('gallery'),
+                      style: const TextStyle(
+                        fontSize: 16,
+                        fontWeight: FontWeight.w600,
+                      ),
+                    ),
                     onTap: () => Navigator.of(ctx).pop(ImageSource.gallery),
                   ),
                 ],
@@ -548,7 +763,9 @@ class ProfileScreen extends StatelessWidget {
           } else if (context.mounted) {
             ScaffoldMessenger.of(context).showSnackBar(
               SnackBar(
-                content: Text(authProvider.error ?? context.tr('photo_update_failed')),
+                content: Text(
+                  authProvider.error ?? context.tr('photo_update_failed'),
+                ),
                 backgroundColor: AppTheme.error,
               ),
             );
@@ -560,7 +777,10 @@ class ProfileScreen extends StatelessWidget {
     }
   }
 
-  void _showDeleteAccountDialog(BuildContext context, AuthProvider authProvider) {
+  void _showDeleteAccountDialog(
+    BuildContext context,
+    AuthProvider authProvider,
+  ) {
     showDialog(
       context: context,
       builder: (ctx) => AlertDialog(
@@ -568,13 +788,13 @@ class ProfileScreen extends StatelessWidget {
           children: [
             Icon(Icons.warning_amber_rounded, color: AppTheme.error),
             const SizedBox(width: 10),
-            Expanded(
-              child: Text(context.tr('delete_account')),
-            ),
+            Expanded(child: Text(context.tr('delete_account'))),
           ],
         ),
         content: Text(
-          context.tr('delete_account_confirm') + '\n\n' + context.tr('delete_account_warn'),
+          context.tr('delete_account_confirm') +
+              '\n\n' +
+              context.tr('delete_account_warn'),
         ),
         actions: [
           TextButton(
@@ -588,9 +808,8 @@ class ProfileScreen extends StatelessWidget {
               showDialog(
                 context: context,
                 barrierDismissible: false,
-                builder: (loadingCtx) => const Center(
-                  child: CircularProgressIndicator(),
-                ),
+                builder: (loadingCtx) =>
+                    const Center(child: CircularProgressIndicator()),
               );
 
               final success = await authProvider.deleteAccount();
@@ -609,7 +828,9 @@ class ProfileScreen extends StatelessWidget {
                 if (context.mounted) {
                   ScaffoldMessenger.of(context).showSnackBar(
                     SnackBar(
-                      content: Text(authProvider.error ?? context.tr('delete_failed')),
+                      content: Text(
+                        authProvider.error ?? context.tr('delete_failed'),
+                      ),
                       backgroundColor: AppTheme.error,
                     ),
                   );

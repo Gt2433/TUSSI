@@ -38,6 +38,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
   bool _isQuickPaused = false;
   bool _hasQuickRecordedAudio = false;
   bool _quickIsPlaying = false;
+  bool _quickIsPaused = false;
   int _quickRecordDurationSec = 0;
   Timer? _quickRecordTimer;
   String? _quickVoicePath;
@@ -51,6 +52,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       if (mounted) {
         setState(() {
           _quickIsPlaying = false;
+          _quickIsPaused = false;
         });
       }
     });
@@ -208,6 +210,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       _isQuickPaused = false;
       _hasQuickRecordedAudio = false;
       _quickIsPlaying = false;
+      _quickIsPaused = false;
       _quickRecordDurationSec = 0;
       _quickVoicePath = null;
     });
@@ -219,13 +222,23 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
 
     if (_quickIsPlaying) {
       await _quickAudioPlayer?.pause();
-      setState(() => _quickIsPlaying = false);
+      setState(() {
+        _quickIsPlaying = false;
+        _quickIsPaused = true;
+      });
     } else {
       try {
-        final bytes = base64Decode(base64String);
-        await _quickAudioPlayer?.stop();
-        await _quickAudioPlayer?.play(BytesSource(Uint8List.fromList(bytes)));
-        setState(() => _quickIsPlaying = true);
+        if (_quickIsPaused) {
+          await _quickAudioPlayer?.resume();
+        } else {
+          final bytes = base64Decode(base64String);
+          await _quickAudioPlayer?.stop();
+          await _quickAudioPlayer?.play(BytesSource(Uint8List.fromList(bytes)));
+        }
+        setState(() {
+          _quickIsPlaying = true;
+          _quickIsPaused = false;
+        });
       } catch (e) {
         _showSnackBar('خطأ في تشغيل الصوت: $e', isError: true);
       }
@@ -287,6 +300,49 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       return;
     }
 
+    if (orderProvider.isOffline) {
+      final isAr = context.tr('tab_orders') == 'الطلبيات';
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(isAr ? 'حفظ الطلب دون اتصال' : 'Save Order Offline'),
+          content: Text(isAr 
+              ? 'هل تود حفظ هذه الطلبية محلياً؟ سيتم تخزينها بأمان على هذا الجهاز وتكون جاهزة للمزامنة فور الاتصال بالإنترنت.'
+              : 'Do you want to save this order locally? It will be safely stored on this device and ready to sync once internet is connected.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(isAr ? 'إلغاء' : 'Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.accentAmber,
+                foregroundColor: AppTheme.surfaceDark,
+              ),
+              child: Text(isAr ? 'حفظ' : 'Save'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        await orderProvider.saveOfflineOrder(
+          senderId: authProvider.user!.uid,
+          senderName: authProvider.displayName,
+          customerName: _customerNameController.text.trim(),
+          shopId: authProvider.appUser?.shopId ?? '',
+          isDraft: false,
+        );
+        _customerNameController.clear();
+        _showSnackBar(
+          isAr ? 'تم حفظ الطلبية محلياً بنجاح (دون اتصال) ✓' : 'Order saved locally successfully (Offline) ✓',
+          isError: false,
+        );
+      }
+      return;
+    }
+
     // Show receiver selection dialog
     final selectedUsers = await SendOrderDialog.show(
       context,
@@ -332,6 +388,49 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     final validationError = orderProvider.validateOrder();
     if (validationError != null) {
       _showSnackBar(validationError, isError: true);
+      return;
+    }
+
+    if (orderProvider.isOffline) {
+      final isAr = context.tr('tab_orders') == 'الطلبيات';
+      final confirm = await showDialog<bool>(
+        context: context,
+        builder: (ctx) => AlertDialog(
+          title: Text(isAr ? 'حفظ المسودة دون اتصال' : 'Save Draft Offline'),
+          content: Text(isAr 
+              ? 'هل تود حفظ هذه المسودة محلياً؟ سيتم تخزينها بأمان على هذا الجهاز وتكون جاهزة للمزامنة فور الاتصال بالإنترنت.'
+              : 'Do you want to save this draft locally? It will be safely stored on this device and ready to sync once internet is connected.'),
+          actions: [
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(false),
+              child: Text(isAr ? 'إلغاء' : 'Cancel'),
+            ),
+            ElevatedButton(
+              onPressed: () => Navigator.of(ctx).pop(true),
+              style: ElevatedButton.styleFrom(
+                backgroundColor: AppTheme.accentAmber,
+                foregroundColor: AppTheme.surfaceDark,
+              ),
+              child: Text(isAr ? 'حفظ' : 'Save'),
+            ),
+          ],
+        ),
+      );
+
+      if (confirm == true) {
+        await orderProvider.saveOfflineOrder(
+          senderId: authProvider.user!.uid,
+          senderName: authProvider.displayName,
+          customerName: _customerNameController.text.trim(),
+          shopId: authProvider.appUser?.shopId ?? '',
+          isDraft: true,
+        );
+        _customerNameController.clear();
+        _showSnackBar(
+          isAr ? 'تم حفظ المسودة محلياً بنجاح (دون اتصال) ✓' : 'Draft saved locally successfully (Offline) ✓',
+          isError: false,
+        );
+      }
       return;
     }
 
@@ -467,37 +566,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
               padding: const EdgeInsets.fromLTRB(16, 8, 16, 140),
               sliver: SliverList(
                 delegate: SliverChildListDelegate([
-                  // Header info
-                  Container(
-                    padding: const EdgeInsets.all(16),
-                    decoration: BoxDecoration(
-                      color: AppTheme.accentAmber.withValues(alpha: 0.06),
-                      borderRadius: BorderRadius.circular(14),
-                      border: Border.all(
-                        color: AppTheme.accentAmber.withValues(alpha: 0.15),
-                      ),
-                    ),
-                    child: Row(
-                      children: [
-                        Icon(
-                          Icons.info_outline_rounded,
-                          color: AppTheme.accentAmber,
-                          size: 20,
-                        ),
-                        const SizedBox(width: 12),
-                        Expanded(
-                          child: Text(
-                            context.tr('new_order_instructions'),
-                            style: TextStyle(
-                              fontSize: 13,
-                              color: AppTheme.accentAmberLight,
-                            ),
-                          ),
-                        ),
-                      ],
-                    ),
-                  ),
-                  const SizedBox(height: 16),
+
                   Row(
                     children: [
                       Expanded(
@@ -575,27 +644,26 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
               top: false,
               child: Row(
                 children: [
-                  // Send Draft Button
-                  Expanded(
-                    flex: 4,
-                    child: ElevatedButton.icon(
+                  // Send Draft Button (Minimized to icon only)
+                  SizedBox(
+                    height: 52,
+                    width: 52,
+                    child: IconButton(
                       onPressed: orderProvider.isSending ? null : _sendDraft,
-                      icon: const Icon(Icons.folder_shared_rounded, size: 18),
-                      label: Text(
-                        isAr ? 'أرسل المسودة' : 'Send Draft',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
-                      ),
-                      style: ElevatedButton.styleFrom(
+                      icon: const Icon(Icons.folder_shared_rounded, size: 20),
+                      color: Colors.white,
+                      style: IconButton.styleFrom(
                         backgroundColor: Colors.orange.shade800,
-                        foregroundColor: Colors.white,
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                        shape: RoundedRectangleBorder(
+                          borderRadius: BorderRadius.circular(16),
+                        ),
+                        padding: EdgeInsets.zero,
                       ),
                     ),
                   ),
                   const SizedBox(width: 12),
                   // Send Order Button
                   Expanded(
-                    flex: 5,
                     child: ElevatedButton.icon(
                       onPressed: orderProvider.isSending ? null : _sendOrder,
                       icon: orderProvider.isSending

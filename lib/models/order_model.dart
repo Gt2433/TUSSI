@@ -47,6 +47,13 @@ class FabricEntry {
   // Sequence of lengths in the order they were added
   List<double> sequence;
 
+  // Temporary backup fields (not serialized to Firestore)
+  Map<String, int>? lengthsBackup;
+  List<double>? sequenceBackup;
+  String? fabricTypeBackup;
+  String? unitBackup;
+  double? priceBackup;
+
   FabricEntry({
     required this.fabricType,
     this.unit = 'meter',
@@ -55,6 +62,41 @@ class FabricEntry {
     List<double>? sequence,
   })  : lengths = lengths ?? {},
         sequence = sequence ?? [];
+
+  /// Backup the current lengths and sequence
+  void backupLengths() {
+    lengthsBackup = Map<String, int>.from(lengths);
+    sequenceBackup = List<double>.from(sequence);
+    fabricTypeBackup = fabricType;
+    unitBackup = unit;
+    priceBackup = price;
+  }
+
+  /// Check if a backup of lengths is available
+  bool get hasBackup => lengthsBackup != null && lengthsBackup!.isNotEmpty;
+
+  /// Restore lengths from backup
+  void restoreBackup() {
+    if (hasBackup) {
+      lengths = Map<String, int>.from(lengthsBackup!);
+      sequence = List<double>.from(sequenceBackup!);
+      if (fabricTypeBackup != null) fabricType = fabricTypeBackup!;
+      if (unitBackup != null) unit = unitBackup!;
+      if (priceBackup != null) price = priceBackup!;
+      lengthsBackup = null;
+      sequenceBackup = null;
+      fabricTypeBackup = null;
+      unitBackup = null;
+      priceBackup = null;
+    }
+  }
+
+  /// Clear lengths after backing them up
+  void clearLengths() {
+    backupLengths();
+    lengths.clear();
+    sequence.clear();
+  }
 
   /// Add a length or increment its multiplier
   void addLength(double length) {
@@ -119,6 +161,14 @@ class Order {
   final String? voiceNoteBase64;
   final String? shopId;
 
+  // ─── Payment Fields ────────────────────────────────────────────
+  /// Overridden final price (null = auto-calculated from fabrics)
+  final double? finalPrice;
+  /// Actual amount paid by the customer
+  final double? paidAmount;
+  /// 'unpaid' | 'partial' | 'paid'
+  final String paymentStatus;
+
   Order({
     required this.id,
     required this.senderId,
@@ -135,7 +185,24 @@ class Order {
     this.isDraft = false,
     this.voiceNoteBase64,
     this.shopId,
+    this.finalPrice,
+    this.paidAmount,
+    this.paymentStatus = 'unpaid',
   });
+
+  /// Computed total price: uses finalPrice if set, else sums fabric costs.
+  double get computedTotal {
+    if (finalPrice != null) return finalPrice!;
+    double total = 0.0;
+    for (final f in fabrics) {
+      final qty = f.sequence.fold(0.0, (sum, v) => sum + v);
+      total += qty * f.price;
+    }
+    return total;
+  }
+
+  /// Remaining balance (positive = customer still owes, negative = change to return)
+  double get balanceDue => computedTotal - (paidAmount ?? 0.0);
 
   factory Order.fromMap(Map<String, dynamic> map, String docId) {
     final fabricsList = (map['fabrics'] as List<dynamic>? ?? [])
@@ -158,6 +225,9 @@ class Order {
       isDraft: map['isDraft'] ?? false,
       voiceNoteBase64: map['voiceNoteBase64'],
       shopId: map['shopId'],
+      finalPrice: (map['finalPrice'] as num?)?.toDouble(),
+      paidAmount: (map['paidAmount'] as num?)?.toDouble(),
+      paymentStatus: map['paymentStatus'] ?? 'unpaid',
     );
   }
 
@@ -177,6 +247,66 @@ class Order {
       'isDraft': isDraft,
       if (voiceNoteBase64 != null) 'voiceNoteBase64': voiceNoteBase64,
       if (shopId != null) 'shopId': shopId,
+      if (finalPrice != null) 'finalPrice': finalPrice,
+      if (paidAmount != null) 'paidAmount': paidAmount,
+      'paymentStatus': paymentStatus,
     };
   }
+
+  Map<String, dynamic> toJsonMap() {
+    return {
+      'id': id,
+      'senderId': senderId,
+      'senderName': senderName,
+      'receiverId': receiverId,
+      'receiverName': receiverName,
+      'customerName': customerName,
+      'fabrics': fabrics.map((f) => f.toMap()).toList(),
+      'createdAt': createdAt.toIso8601String(),
+      'status': status,
+      'completedAt': completedAt?.toIso8601String(),
+      'expireAt': expireAt?.toIso8601String(),
+      'broadcastGroupId': broadcastGroupId,
+      'isDraft': isDraft,
+      'voiceNoteBase64': voiceNoteBase64,
+      'shopId': shopId,
+      'finalPrice': finalPrice,
+      'paidAmount': paidAmount,
+      'paymentStatus': paymentStatus,
+    };
+  }
+
+  factory Order.fromJsonMap(Map<String, dynamic> map) {
+    final fabricsList = (map['fabrics'] as List<dynamic>? ?? [])
+        .map((f) => FabricEntry.fromMap(f as Map<String, dynamic>))
+        .toList();
+
+    return Order(
+      id: map['id'] ?? '',
+      senderId: map['senderId'] ?? '',
+      senderName: map['senderName'] ?? '',
+      receiverId: map['receiverId'] ?? '',
+      receiverName: map['receiverName'] ?? '',
+      customerName: map['customerName'],
+      fabrics: fabricsList,
+      createdAt: map['createdAt'] != null
+          ? DateTime.parse(map['createdAt'])
+          : DateTime.now(),
+      status: map['status'] ?? 'pending',
+      completedAt: map['completedAt'] != null
+          ? DateTime.parse(map['completedAt'])
+          : null,
+      expireAt: map['expireAt'] != null
+          ? DateTime.parse(map['expireAt'])
+          : null,
+      broadcastGroupId: map['broadcastGroupId'],
+      isDraft: map['isDraft'] ?? false,
+      voiceNoteBase64: map['voiceNoteBase64'],
+      shopId: map['shopId'],
+      finalPrice: (map['finalPrice'] as num?)?.toDouble(),
+      paidAmount: (map['paidAmount'] as num?)?.toDouble(),
+      paymentStatus: map['paymentStatus'] ?? 'unpaid',
+    );
+  }
 }
+

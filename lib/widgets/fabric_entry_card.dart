@@ -165,21 +165,45 @@ class _FabricEntryCardState extends State<FabricEntryCard>
                 IconButton(
                   icon: Icon(
                     Icons.delete_outline_rounded,
-                    color: AppTheme.error,
-                    size: 20,
+                    color: AppTheme.error.withValues(alpha: 0.5),
+                    size: 16,
                   ),
                   onPressed: () {
                     if (widget.canRemove) {
                       provider.removeFabricEntry(widget.entryIndex);
+                      ScaffoldMessenger.of(context).clearSnackBars();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.tr('entry_deleted') ?? 'تم حذف الصنف'),
+                          action: SnackBarAction(
+                            label: context.tr('undo') ?? 'تراجع',
+                            onPressed: () {
+                              provider.restoreRemovedFabricEntry();
+                            },
+                          ),
+                        ),
+                      );
                     } else {
                       provider.clearEntryLengths(widget.entryIndex);
                       provider.updateFabricType(widget.entryIndex, '', 'meter', 0.0);
+                      ScaffoldMessenger.of(context).clearSnackBars();
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(
+                          content: Text(context.tr('lengths_cleared') ?? 'تم مسح الأمتار'),
+                          action: SnackBarAction(
+                            label: context.tr('undo') ?? 'تراجع',
+                            onPressed: () {
+                              provider.restoreEntryLengths(widget.entryIndex);
+                            },
+                          ),
+                        ),
+                      );
                     }
                   },
                   style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.errorSurface,
-                    padding: const EdgeInsets.all(6),
+                    padding: const EdgeInsets.all(4),
                     minimumSize: Size.zero,
+                    tapTargetSize: MaterialTapTargetSize.shrinkWrap,
                   ),
                 ),
               ],
@@ -275,7 +299,7 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
         return StatefulBuilder(
           builder: (context, setState) {
             final filteredTypes = fabricTypes.where((type) {
-              return type.name.toLowerCase().contains(searchQuery.toLowerCase());
+              return AppTheme.matchesFuzzy(searchQuery, type.name);
             }).toList();
 
             final isAr = Provider.of<LanguageProvider>(context, listen: false).language == AppLanguage.ar;
@@ -683,17 +707,21 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                   },
                 ),
 
-                // Selected Lengths Summary
-                if (entry.lengths.isNotEmpty) ...[
+                 // Selected Lengths Summary
+                if (entry.lengths.isNotEmpty || entry.hasBackup) ...[
                   const SizedBox(height: 16),
                   Container(
                     width: double.infinity,
                     padding: const EdgeInsets.all(14),
                     decoration: BoxDecoration(
-                      color: AppTheme.accentAmber.withValues(alpha: 0.06),
+                      color: entry.lengths.isNotEmpty
+                          ? AppTheme.accentAmber.withValues(alpha: 0.06)
+                          : AppTheme.error.withValues(alpha: 0.06),
                       borderRadius: BorderRadius.circular(12),
                       border: Border.all(
-                        color: AppTheme.accentAmber.withValues(alpha: 0.2),
+                        color: entry.lengths.isNotEmpty
+                            ? AppTheme.accentAmber.withValues(alpha: 0.2)
+                            : AppTheme.error.withValues(alpha: 0.2),
                       ),
                     ),
                     child: Column(
@@ -703,66 +731,106 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                           mainAxisAlignment: MainAxisAlignment.spaceBetween,
                           children: [
                             Text(
-                              context.tr('selected_lengths'),
+                              entry.lengths.isNotEmpty
+                                  ? context.tr('selected_lengths')
+                                  : (context.tr('lengths_cleared') ?? 'تم مسح الأمتار'),
                               style: TextStyle(
                                 fontSize: 12,
                                 fontWeight: FontWeight.w500,
-                                color: AppTheme.accentAmber,
+                                color: entry.lengths.isNotEmpty ? AppTheme.accentAmber : AppTheme.error,
                               ),
                             ),
-                            InkWell(
-                              onTap: () =>
-                                  provider.clearEntryLengths(widget.entryIndex),
-                              child: Row(
-                                children: [
-                                  Icon(
-                                    Icons.refresh_rounded,
-                                    size: 14,
-                                    color: AppTheme.error,
-                                  ),
-                                  const SizedBox(width: 4),
-                                  Text(
-                                    context.tr('clear_lengths'),
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      color: AppTheme.error,
-                                      fontWeight: FontWeight.w600,
+                            if (entry.lengths.isNotEmpty)
+                              InkWell(
+                                onTap: () {
+                                  provider.clearEntryLengths(widget.entryIndex);
+                                  ScaffoldMessenger.of(context).clearSnackBars();
+                                  ScaffoldMessenger.of(context).showSnackBar(
+                                    SnackBar(
+                                      content: Text(context.tr('lengths_cleared') ?? 'تم مسح الأمتار'),
+                                      action: SnackBarAction(
+                                        label: context.tr('undo') ?? 'تراجع',
+                                        onPressed: () {
+                                          provider.restoreEntryLengths(widget.entryIndex);
+                                        },
+                                      ),
                                     ),
+                                  );
+                                },
+                                child: Padding(
+                                  padding: const EdgeInsets.all(4),
+                                  child: Icon(
+                                    Icons.refresh_rounded,
+                                    size: 16,
+                                    color: AppTheme.error.withValues(alpha: 0.6),
                                   ),
-                                ],
+                                ),
+                              )
+                            else
+                              InkWell(
+                                onTap: () =>
+                                    provider.restoreEntryLengths(widget.entryIndex),
+                                child: Row(
+                                  children: [
+                                    Icon(
+                                      Icons.undo_rounded,
+                                      size: 14,
+                                      color: AppTheme.accentAmber,
+                                    ),
+                                    const SizedBox(width: 4),
+                                    Text(
+                                      context.tr('restore_lengths') ?? 'استرجاع الأمتار',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        color: AppTheme.accentAmber,
+                                        fontWeight: FontWeight.w600,
+                                      ),
+                                    ),
+                                  ],
+                                ),
                               ),
-                            ),
                           ],
                         ),
-                        const SizedBox(height: 6),
-                        Wrap(
-                          spacing: 12,
-                          runSpacing: 6,
-                          children: (entry.lengths.entries.toList()..sort((a, b) {
-                            final double valA = double.tryParse(a.key) ?? 0.0;
-                            final double valB = double.tryParse(b.key) ?? 0.0;
-                            return valB.compareTo(valA);
-                          })).map((e) {
-                            final displayLength = double.tryParse(e.key);
-                            final lengthText = displayLength != null &&
-                                    displayLength ==
-                                        displayLength.roundToDouble()
-                                ? displayLength.toInt().toString()
-                                : e.key;
-                            final displayLengthText = lengthText;
+                        if (entry.lengths.isNotEmpty) ...[
+                          const SizedBox(height: 6),
+                          Wrap(
+                            spacing: 12,
+                            runSpacing: 6,
+                            children: (entry.lengths.entries.toList()..sort((a, b) {
+                              final double valA = double.tryParse(a.key) ?? 0.0;
+                              final double valB = double.tryParse(b.key) ?? 0.0;
+                              return valB.compareTo(valA);
+                            })).map((e) {
+                              final displayLength = double.tryParse(e.key);
+                              final lengthText = displayLength != null &&
+                                      displayLength ==
+                                          displayLength.roundToDouble()
+                                  ? displayLength.toInt().toString()
+                                  : e.key;
+                              final displayLengthText = lengthText;
 
-                            return Text(
-                              e.value > 1
-                                  ? '$displayLengthText ×${e.value}'
-                                  : displayLengthText,
-                              style: TextStyle(
-                                fontSize: 15,
-                                fontWeight: FontWeight.w600,
-                                color: AppTheme.textPrimary,
-                              ),
-                            );
-                          }).toList(),
-                        ),
+                              return Text(
+                                e.value > 1
+                                    ? '$displayLengthText ×${e.value}'
+                                    : displayLengthText,
+                                style: TextStyle(
+                                  fontSize: 15,
+                                  fontWeight: FontWeight.w600,
+                                  color: AppTheme.textPrimary,
+                                ),
+                              );
+                            }).toList(),
+                          ),
+                        ] else ...[
+                          const SizedBox(height: 6),
+                          Text(
+                            context.tr('restore_lengths_hint') ?? 'تم مسح الأمتار بالخطأ؟ اضغط استرجاع للمحاولة مجدداً',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textMuted,
+                            ),
+                          ),
+                        ],
                       ],
                     ),
                   ),
@@ -1078,8 +1146,8 @@ class _AddFabricTypeButton extends StatelessWidget {
   }
 
   void _showAddDialog(BuildContext context) {
-    final nameController = TextEditingController();
-    final priceController = TextEditingController();
+    final dialogNameController = TextEditingController();
+    final dialogPriceController = TextEditingController();
 
     showDialog(
       context: context,
@@ -1097,7 +1165,7 @@ class _AddFabricTypeButton extends StatelessWidget {
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
                     TextField(
-                      controller: nameController,
+                      controller: dialogNameController,
                       autofocus: true,
                       decoration: InputDecoration(
                         hintText: context.tr('fabric_type_name'),
@@ -1112,7 +1180,7 @@ class _AddFabricTypeButton extends StatelessWidget {
                     ),
                     const SizedBox(height: 16),
                     TextField(
-                      controller: priceController,
+                      controller: dialogPriceController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
                       decoration: InputDecoration(
                         hintText: context.tr('fabric_price'),
@@ -1195,8 +1263,8 @@ class _AddFabricTypeButton extends StatelessWidget {
                 ),
                 ElevatedButton(
                   onPressed: () {
-                    final name = nameController.text.trim();
-                    final priceText = priceController.text.trim();
+                    final name = dialogNameController.text.trim();
+                    final priceText = dialogPriceController.text.trim();
                     if (name.isEmpty) {
                       setState(() {
                         validationError = context.tr('fabric_name_required');

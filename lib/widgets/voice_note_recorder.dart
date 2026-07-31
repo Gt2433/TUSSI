@@ -33,6 +33,7 @@ class _VoiceNoteRecorderState extends State<VoiceNoteRecorder> {
   
   // Playback state
   bool _isPlaying = false;
+  bool _isPaused = false;
   StreamSubscription? _compSub;
 
   // Red mic flash state
@@ -47,6 +48,7 @@ class _VoiceNoteRecorderState extends State<VoiceNoteRecorder> {
       if (mounted) {
         setState(() {
           _isPlaying = false;
+          _isPaused = false;
         });
       }
     });
@@ -171,13 +173,23 @@ class _VoiceNoteRecorderState extends State<VoiceNoteRecorder> {
   Future<void> _playPause(String base64String) async {
     if (_isPlaying) {
       await _audioPlayer?.pause();
-      setState(() => _isPlaying = false);
+      setState(() {
+        _isPlaying = false;
+        _isPaused = true;
+      });
     } else {
       try {
-        final bytes = base64Decode(base64String);
-        await _audioPlayer?.stop();
-        await _audioPlayer?.play(BytesSource(Uint8List.fromList(bytes)));
-        setState(() => _isPlaying = true);
+        if (_isPaused) {
+          await _audioPlayer?.resume();
+        } else {
+          final bytes = base64Decode(base64String);
+          await _audioPlayer?.stop();
+          await _audioPlayer?.play(BytesSource(Uint8List.fromList(bytes)));
+        }
+        setState(() {
+          _isPlaying = true;
+          _isPaused = false;
+        });
       } catch (e) {
         print('Playback error: $e');
       }

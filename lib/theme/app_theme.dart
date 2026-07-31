@@ -6,6 +6,23 @@ import 'package:google_fonts/google_fonts.dart';
 class AppTheme {
   AppTheme._();
 
+  /// Case-insensitive, space-ignoring, ordered subsequence/fuzzy match for fabric names.
+  static bool matchesFuzzy(String query, String target) {
+    final queryClean = query.replaceAll(' ', '').toLowerCase();
+    final targetClean = target.replaceAll(' ', '').toLowerCase();
+    if (queryClean.isEmpty) return true;
+
+    int queryIdx = 0;
+    int targetIdx = 0;
+    while (queryIdx < queryClean.length && targetIdx < targetClean.length) {
+      if (queryClean[queryIdx] == targetClean[targetIdx]) {
+        queryIdx++;
+      }
+      targetIdx++;
+    }
+    return queryIdx == queryClean.length;
+  }
+
   // ─── Theme State ───────────────────────────────────────────────
   static bool isDark = true;
 

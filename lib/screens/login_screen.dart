@@ -26,8 +26,11 @@ class _LoginScreenState extends State<LoginScreen>
   final _passwordController = TextEditingController();
   final _nameController = TextEditingController();
   final _activationCodeController = TextEditingController();
+  final _shopNameController = TextEditingController();
+  final _shopCodeController = TextEditingController();
 
   bool _isRegistering = false;
+  int _shopRegistrationMode = 0; // 0 = Create Shop, 1 = Join Shop by Code
   bool _obscurePassword = true;
   String? _profilePhotoBase64;
 
@@ -257,19 +260,23 @@ class _LoginScreenState extends State<LoginScreen>
         Provider.of<app_auth.AuthProvider>(context, listen: false);
 
     if (_isRegistering) {
-      // If no activation code, show WhatsApp dialog instead
-      if (_activationCodeController.text.trim().isEmpty) {
-        _showNoCodeDialog();
-        return;
+      if (_shopRegistrationMode == 0) {
+        await authProvider.signUpCreateShop(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          displayName: _nameController.text.trim(),
+          shopName: _shopNameController.text.trim(),
+          photoBase64: _profilePhotoBase64,
+        );
+      } else {
+        await authProvider.signUpJoinShop(
+          email: _emailController.text.trim(),
+          password: _passwordController.text,
+          displayName: _nameController.text.trim(),
+          shopCode: _shopCodeController.text.trim(),
+          photoBase64: _profilePhotoBase64,
+        );
       }
-
-      await authProvider.register(
-        email: _emailController.text.trim(),
-        password: _passwordController.text,
-        displayName: _nameController.text.trim(),
-        activationCode: _activationCodeController.text.trim(),
-        photoBase64: _profilePhotoBase64,
-      );
     } else {
       await authProvider.signIn(
         email: _emailController.text.trim(),
@@ -286,75 +293,184 @@ class _LoginScreenState extends State<LoginScreen>
     authProvider.clearError();
 
     if (_isRegistering) {
-      final code = _activationCodeController.text.trim();
-      if (code.isEmpty) {
-        _showNoCodeDialog();
-        return;
+      if (_shopRegistrationMode == 0 && _shopNameController.text.trim().isNotEmpty) {
+        await authProvider.signInWithGoogleCreateShop(
+          shopName: _shopNameController.text.trim(),
+        );
+      } else if (_shopRegistrationMode == 1 && _shopCodeController.text.trim().isNotEmpty) {
+        await authProvider.signInWithGoogleJoinShop(
+          shopCode: _shopCodeController.text.trim(),
+        );
+      } else {
+        _showGoogleShopSetupDialog();
       }
-      
-      await authProvider.signInWithGoogle(activationCode: code);
     } else {
       final result = await authProvider.signInWithGoogle();
-      if (result == 'need-activation-code') {
-        _showGoogleActivationDialog();
+      if (result == 'need-shop-setup') {
+        _showGoogleShopSetupDialog();
       }
     }
   }
 
-  void _showGoogleActivationDialog() {
-    final codeController = TextEditingController();
+  // ─── Google Shop Setup Dialog (Create Shop or Join Shop) ────
+  void _showGoogleShopSetupDialog() {
+    final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final shopNameCtrl = TextEditingController();
+    final shopCodeCtrl = TextEditingController();
+    int mode = 0; // 0 = Create, 1 = Join
+
     showDialog(
       context: context,
       barrierDismissible: false,
-      builder: (ctx) => AlertDialog(
-        title: const Text('تفعيل الحساب باستخدام Google'),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            const Text('هذا الحساب غير مسجل بعد في النظام. يرجى إدخال كود التفعيل/الدعوة الخاص بك لإكمال عملية إنشاء الحساب:'),
-            const SizedBox(height: 16),
-            TextField(
-              controller: codeController,
-              textCapitalization: TextCapitalization.characters,
-              decoration: const InputDecoration(
-                labelText: 'كود التفعيل (مثال: FN-123456)',
-                prefixIcon: Icon(Icons.vpn_key_rounded),
-              ),
+      builder: (dlgCtx) => StatefulBuilder(
+        builder: (context, setDlgState) => Dialog(
+          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+          backgroundColor: AppTheme.surfaceCard,
+          child: Padding(
+            padding: const EdgeInsets.all(22),
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(12),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber, size: 32),
+                ),
+                const SizedBox(height: 14),
+                Text(
+                  context.tr('welcome_choose_account_type'),
+                  style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 16),
+
+                // Mode Selector Toggle
+                Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceDark,
+                    borderRadius: BorderRadius.circular(14),
+                    border: Border.all(color: AppTheme.borderSubtle),
+                  ),
+                  child: Row(
+                    children: [
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setDlgState(() => mode = 0),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: mode == 0 ? AppTheme.accentAmber : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              context.tr('create_new_shop'),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: mode == 0 ? Colors.black : AppTheme.textMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                      Expanded(
+                        child: GestureDetector(
+                          onTap: () => setDlgState(() => mode = 1),
+                          child: Container(
+                            padding: const EdgeInsets.symmetric(vertical: 10),
+                            decoration: BoxDecoration(
+                              color: mode == 1 ? AppTheme.accentAmber : Colors.transparent,
+                              borderRadius: BorderRadius.circular(10),
+                            ),
+                            child: Text(
+                              context.tr('join_existing_shop'),
+                              textAlign: TextAlign.center,
+                              style: TextStyle(
+                                fontSize: 12,
+                                fontWeight: FontWeight.bold,
+                                color: mode == 1 ? Colors.black : AppTheme.textMuted,
+                              ),
+                            ),
+                          ),
+                        ),
+                      ),
+                    ],
+                  ),
+                ),
+                const SizedBox(height: 18),
+
+                if (mode == 0) ...[
+                  TextField(
+                    controller: shopNameCtrl,
+                    textDirection: TextDirection.rtl,
+                    decoration: InputDecoration(
+                      labelText: context.tr('shop_name_label'),
+                      hintText: '...',
+                      prefixIcon: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber),
+                    ),
+                  ),
+                ] else ...[
+                  TextField(
+                    controller: shopCodeCtrl,
+                    textCapitalization: TextCapitalization.characters,
+                    decoration: InputDecoration(
+                      labelText: context.tr('shop_code_label'),
+                      hintText: 'SHOP-XXXX',
+                      prefixIcon: Icon(Icons.qr_code_rounded, color: AppTheme.accentAmber),
+                    ),
+                  ),
+                ],
+                const SizedBox(height: 20),
+
+                Row(
+                  children: [
+                    Expanded(
+                      child: TextButton(
+                        onPressed: () async {
+                          Navigator.of(dlgCtx).pop();
+                          await authProvider.signOut();
+                        },
+                        child: Text(context.tr('cancel'), style: TextStyle(color: AppTheme.textMuted)),
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: AppTheme.accentAmber,
+                          foregroundColor: Colors.black,
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        ),
+                        onPressed: () async {
+                          if (mode == 0) {
+                            final name = shopNameCtrl.text.trim();
+                            if (name.isNotEmpty) {
+                              Navigator.of(dlgCtx).pop();
+                              await authProvider.signInWithGoogleCreateShop(shopName: name);
+                            }
+                          } else {
+                            final code = shopCodeCtrl.text.trim();
+                            if (code.isNotEmpty) {
+                              Navigator.of(dlgCtx).pop();
+                              await authProvider.signInWithGoogleJoinShop(shopCode: code);
+                            }
+                          }
+                        },
+                        child: Text(context.tr('done_btn'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
+                    ),
+                  ],
+                ),
+              ],
             ),
-          ],
+          ),
         ),
-        actions: [
-          TextButton(
-            onPressed: () async {
-              Navigator.of(ctx).pop();
-              await Provider.of<app_auth.AuthProvider>(context, listen: false).signOut();
-            },
-            child: const Text('إلغاء'),
-          ),
-          ElevatedButton(
-            onPressed: () async {
-              final code = codeController.text.trim();
-              if (code.isNotEmpty) {
-                Navigator.of(ctx).pop();
-                
-                showDialog(
-                  context: context,
-                  barrierDismissible: false,
-                  builder: (loadingCtx) => const Center(child: CircularProgressIndicator()),
-                );
-
-                await Provider.of<app_auth.AuthProvider>(context, listen: false)
-                    .signInWithGoogle(activationCode: code);
-
-                if (context.mounted) {
-                  Navigator.of(context).pop();
-                }
-              }
-            },
-            child: const Text('تفعيل ودخول'),
-          ),
-        ],
       ),
     );
   }
@@ -380,6 +496,11 @@ class _LoginScreenState extends State<LoginScreen>
                     mainAxisAlignment: MainAxisAlignment.center,
                     children: [
                       SizedBox(height: screenHeight * 0.04),
+
+                      // ─── Language Selector Bar ────────────
+                      _buildLanguageSelector(context),
+
+                      const SizedBox(height: 12),
 
                       // ─── Logo ──────────────────────────────
                       Hero(
@@ -520,218 +641,62 @@ class _LoginScreenState extends State<LoginScreen>
                               ],
                               if (_isRegistering) ...[
                                 const SizedBox(height: 16),
+                                // ─── Shop Mode Selector (إنشاء محل / انضمام لمحل) ─────
                                 Container(
-                                  padding: const EdgeInsets.all(16),
+                                  padding: const EdgeInsets.all(4),
                                   decoration: BoxDecoration(
-                                    gradient: LinearGradient(
-                                      colors: [
-                                        AppTheme.accentAmber.withValues(alpha: 0.12),
-                                        AppTheme.accentAmber.withValues(alpha: 0.03),
-                                      ],
-                                      begin: Alignment.topLeft,
-                                      end: Alignment.bottomRight,
-                                    ),
-                                    borderRadius: BorderRadius.circular(20),
-                                    border: Border.all(
-                                      color: AppTheme.accentAmber.withValues(alpha: 0.25),
-                                      width: 1,
-                                    ),
+                                    color: AppTheme.surfaceDark,
+                                    borderRadius: BorderRadius.circular(14),
+                                    border: Border.all(color: AppTheme.borderSubtle),
                                   ),
-                                  child: Column(
-                                    crossAxisAlignment: CrossAxisAlignment.start,
+                                  child: Row(
                                     children: [
-                                      Row(
-                                        children: [
-                                          Icon(
-                                            Icons.card_membership_rounded,
-                                            color: AppTheme.accentAmber,
-                                            size: 20,
-                                          ),
-                                          const SizedBox(width: 8),
-                                          Text(
-                                            isAr ? 'أسعار خطط الاشتراك' : 'Subscription Plans',
-                                            style: const TextStyle(
-                                              fontSize: 14,
-                                              fontWeight: FontWeight.bold,
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      Column(
-                                        children: [
-                                          // Monthly Plan
-                                          Container(
-                                            width: double.infinity,
-                                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () => setState(() => _shopRegistrationMode = 0),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(vertical: 10),
                                             decoration: BoxDecoration(
-                                              color: AppTheme.surfaceDark.withValues(alpha: 0.4),
-                                              borderRadius: BorderRadius.circular(14),
-                                              border: Border.all(color: AppTheme.borderSubtle, width: 0.8),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Text(
-                                                        isAr ? 'الاشتراك الشهري' : 'Monthly Plan',
-                                                        style: TextStyle(
-                                                          fontSize: 13,
-                                                          fontWeight: FontWeight.bold,
-                                                          color: AppTheme.textPrimary,
-                                                        ),
-                                                      ),
-                                                      const SizedBox(height: 2),
-                                                      Text(
-                                                        isAr ? 'تجديد تلقائي شهرياً' : 'Renewed monthly',
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          color: AppTheme.textMuted,
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                                  children: [
-                                                    Text(
-                                                      isAr ? '5,000 د.ج' : '5,000 DZD',
-                                                      style: TextStyle(
-                                                        fontSize: 14,
-                                                        fontWeight: FontWeight.w800,
-                                                        color: AppTheme.accentAmber,
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      isAr ? 'شهرياً' : '/ month',
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        color: AppTheme.textSecondary,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                          const SizedBox(height: 10),
-                                          // Lifetime Plan (Ultimate)
-                                          Container(
-                                            width: double.infinity,
-                                            padding: const EdgeInsets.symmetric(vertical: 12, horizontal: 16),
-                                            decoration: BoxDecoration(
-                                              color: const Color(0x1F9C27B0),
-                                              borderRadius: BorderRadius.circular(14),
-                                              border: Border.all(
-                                                color: const Color(0xFF9C27B0),
-                                                width: 1.2,
-                                              ),
-                                            ),
-                                            child: Row(
-                                              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                                              children: [
-                                                Expanded(
-                                                  child: Column(
-                                                    crossAxisAlignment: CrossAxisAlignment.start,
-                                                    children: [
-                                                      Wrap(
-                                                        spacing: 6,
-                                                        runSpacing: 4,
-                                                        crossAxisAlignment: WrapCrossAlignment.center,
-                                                        children: [
-                                                          Text(
-                                                            isAr ? 'الاشتراك الدائم' : 'Lifetime Plan',
-                                                            style: const TextStyle(
-                                                              fontSize: 13,
-                                                              fontWeight: FontWeight.bold,
-                                                              color: Colors.white,
-                                                            ),
-                                                          ),
-                                                          Container(
-                                                            padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
-                                                            decoration: BoxDecoration(
-                                                              color: const Color(0xFF9C27B0),
-                                                              borderRadius: BorderRadius.circular(6),
-                                                            ),
-                                                            child: Text(
-                                                              isAr ? 'مدى الحياة' : 'Lifetime',
-                                                              style: const TextStyle(
-                                                                fontSize: 8,
-                                                                fontWeight: FontWeight.bold,
-                                                                color: Colors.white,
-                                                              ),
-                                                            ),
-                                                          ),
-                                                        ],
-                                                      ),
-                                                      const SizedBox(height: 2),
-                                                      Text(
-                                                        isAr ? 'شراء لمرة واحدة وتفعيل دائم' : 'One-time payment, lifetime use',
-                                                        style: TextStyle(
-                                                          fontSize: 10,
-                                                          color: AppTheme.textSecondary,
-                                                        ),
-                                                        maxLines: 1,
-                                                        overflow: TextOverflow.ellipsis,
-                                                      ),
-                                                    ],
-                                                  ),
-                                                ),
-                                                const SizedBox(width: 8),
-                                                Column(
-                                                  crossAxisAlignment: CrossAxisAlignment.end,
-                                                  children: [
-                                                    Text(
-                                                      isAr ? '120,000 د.ج' : '120,000 DZD',
-                                                      style: const TextStyle(
-                                                        fontSize: 14,
-                                                        fontWeight: FontWeight.w800,
-                                                        color: Color(0xFFBA68C8),
-                                                      ),
-                                                    ),
-                                                    Text(
-                                                      isAr ? 'دفعة واحدة' : 'One-time',
-                                                      style: TextStyle(
-                                                        fontSize: 9,
-                                                        color: AppTheme.textSecondary,
-                                                      ),
-                                                    ),
-                                                  ],
-                                                ),
-                                              ],
-                                            ),
-                                          ),
-                                        ],
-                                      ),
-                                      const SizedBox(height: 12),
-                                      // WhatsApp Direct Request Button
-                                      SizedBox(
-                                        width: double.infinity,
-                                        height: 36,
-                                        child: ElevatedButton.icon(
-                                          onPressed: _openWhatsApp,
-                                          style: ElevatedButton.styleFrom(
-                                            backgroundColor: const Color(0xFF25D366),
-                                            foregroundColor: Colors.white,
-                                            shape: RoundedRectangleBorder(
+                                              color: _shopRegistrationMode == 0
+                                                  ? AppTheme.accentAmber
+                                                  : Colors.transparent,
                                               borderRadius: BorderRadius.circular(10),
                                             ),
-                                            padding: EdgeInsets.zero,
-                                            elevation: 0,
+                                            child: Text(
+                                              isAr ? '🏬 إنشاء محل جديد' : 'Create Shop',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: _shopRegistrationMode == 0
+                                                    ? Colors.black
+                                                    : AppTheme.textMuted,
+                                              ),
+                                            ),
                                           ),
-                                          icon: const Icon(Icons.chat_rounded, size: 14),
-                                          label: Text(
-                                            isAr ? 'طلب كود التفعيل والاشتراك' : 'Get Activation Code',
-                                            style: const TextStyle(
-                                              fontSize: 12,
-                                              fontWeight: FontWeight.bold,
+                                        ),
+                                      ),
+                                      Expanded(
+                                        child: GestureDetector(
+                                          onTap: () => setState(() => _shopRegistrationMode = 1),
+                                          child: Container(
+                                            padding: const EdgeInsets.symmetric(vertical: 10),
+                                            decoration: BoxDecoration(
+                                              color: _shopRegistrationMode == 1
+                                                  ? AppTheme.accentAmber
+                                                  : Colors.transparent,
+                                              borderRadius: BorderRadius.circular(10),
+                                            ),
+                                            child: Text(
+                                              isAr ? '🔗 انضمام لمحل' : 'Join Shop',
+                                              textAlign: TextAlign.center,
+                                              style: TextStyle(
+                                                fontSize: 12,
+                                                fontWeight: FontWeight.bold,
+                                                color: _shopRegistrationMode == 1
+                                                    ? Colors.black
+                                                    : AppTheme.textMuted,
+                                              ),
                                             ),
                                           ),
                                         ),
@@ -740,7 +705,7 @@ class _LoginScreenState extends State<LoginScreen>
                                   ),
                                 ),
                               ],
-                              const SizedBox(height: 24),
+                              const SizedBox(height: 20),
 
                               // ── Name field (register only) ─
                               AnimatedSize(
@@ -828,77 +793,54 @@ class _LoginScreenState extends State<LoginScreen>
                                 },
                               ),
 
-                              // ── Activation Code (register only) ──
+                              // ── Shop Name or Shop Code Input (register only) ──
                               AnimatedSize(
                                 duration: const Duration(milliseconds: 300),
                                 curve: Curves.easeInOut,
                                 child: _isRegistering
                                     ? Column(
-                                        crossAxisAlignment:
-                                            CrossAxisAlignment.start,
+                                        crossAxisAlignment: CrossAxisAlignment.start,
                                         children: [
                                           const SizedBox(height: 16),
-                                          TextFormField(
-                                            controller:
-                                                _activationCodeController,
-                                            textCapitalization:
-                                                TextCapitalization.characters,
-                                            decoration: InputDecoration(
-                                              labelText: isAr
-                                                  ? 'كود التفعيل'
-                                                  : 'Activation Code',
-                                              hintText: isAr
-                                                  ? 'مثال: FN-128456'
-                                                  : 'e.g. FN-128456',
-                                              prefixIcon: Icon(
-                                                Icons.vpn_key_rounded,
-                                                color: AppTheme.accentAmber,
-                                              ),
-                                              enabledBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(14),
-                                                borderSide: BorderSide(
-                                                  color: AppTheme.accentAmber
-                                                      .withValues(alpha: 0.4),
-                                                  width: 1.5,
-                                                ),
-                                              ),
-                                              focusedBorder: OutlineInputBorder(
-                                                borderRadius:
-                                                    BorderRadius.circular(14),
-                                                borderSide: BorderSide(
+                                          if (_shopRegistrationMode == 0) ...[
+                                            TextFormField(
+                                              controller: _shopNameController,
+                                              textDirection: TextDirection.rtl,
+                                              decoration: InputDecoration(
+                                                labelText: context.tr('shop_name_label'),
+                                                hintText: '...',
+                                                prefixIcon: Icon(
+                                                  Icons.storefront_rounded,
                                                   color: AppTheme.accentAmber,
-                                                  width: 2,
                                                 ),
                                               ),
+                                              validator: (v) {
+                                                if (_isRegistering && _shopRegistrationMode == 0 && (v == null || v.trim().isEmpty)) {
+                                                  return context.tr('shop_name_label');
+                                                }
+                                                return null;
+                                              },
                                             ),
-                                          ),
-                                          const SizedBox(height: 10),
-                                          // "No code?" link
-                                          GestureDetector(
-                                            onTap: _showNoCodeDialog,
-                                            child: Row(
-                                              children: [
-                                                Icon(
-                                                  Icons.chat_rounded,
-                                                  size: 16,
-                                                  color: const Color(0xFF25D366),
+                                          ] else ...[
+                                            TextFormField(
+                                              controller: _shopCodeController,
+                                              textCapitalization: TextCapitalization.characters,
+                                              decoration: InputDecoration(
+                                                labelText: context.tr('shop_code_label'),
+                                                hintText: 'SHOP-XXXX',
+                                                prefixIcon: Icon(
+                                                  Icons.qr_code_rounded,
+                                                  color: AppTheme.accentAmber,
                                                 ),
-                                                const SizedBox(width: 6),
-                                                Text(
-                                                  isAr
-                                                      ? 'ليس لديك كود؟ تواصل معنا'
-                                                      : "No code? Contact us",
-                                                  style: TextStyle(
-                                                    fontSize: 13,
-                                                    color:
-                                                        const Color(0xFF25D366),
-                                                    fontWeight: FontWeight.w500,
-                                                  ),
-                                                ),
-                                              ],
+                                              ),
+                                              validator: (v) {
+                                                if (_isRegistering && _shopRegistrationMode == 1 && (v == null || v.trim().isEmpty)) {
+                                                  return context.tr('shop_code_label');
+                                                }
+                                                return null;
+                                              },
                                             ),
-                                          ),
+                                          ],
                                         ],
                                       )
                                     : const SizedBox.shrink(),
@@ -1035,11 +977,14 @@ class _LoginScreenState extends State<LoginScreen>
                               Center(
                                 child: TextButton(
                                   onPressed: () {
-                                    setState(() {
-                                      _isRegistering = !_isRegistering;
-                                      _activationCodeController.clear();
-                                      authProvider.clearError();
-                                    });
+                                    if (!_isRegistering) {
+                                      _showShopChoiceDialog();
+                                    } else {
+                                      setState(() {
+                                        _isRegistering = false;
+                                        authProvider.clearError();
+                                      });
+                                    }
                                   },
                                   child: Text(
                                     _isRegistering
@@ -1056,13 +1001,231 @@ class _LoginScreenState extends State<LoginScreen>
                           ),
                         ),
                       ),
-
                       SizedBox(height: screenHeight * 0.06),
                     ],
                   ),
                 ),
               ),
             ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  // ─── Language Selector Widget ─────────────────────────────
+  Widget _buildLanguageSelector(BuildContext context) {
+    final langProvider = context.watch<LanguageProvider>();
+
+    final languages = [
+      {'code': AppLanguage.ar, 'label': 'العربية', 'flag': '🇩🇿'},
+      {'code': AppLanguage.fr, 'label': 'Français', 'flag': '🇫🇷'},
+      {'code': AppLanguage.en, 'label': 'English', 'flag': '🇬🇧'},
+      {'code': AppLanguage.es, 'label': 'Español', 'flag': '🇪🇸'},
+      {'code': AppLanguage.zh, 'label': '中文', 'flag': '🇨🇳'},
+    ];
+
+    return Container(
+      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 2),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceElevated,
+        borderRadius: BorderRadius.circular(20),
+        border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.4), width: 1.2),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.2),
+            blurRadius: 10,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: Row(
+        mainAxisSize: MainAxisSize.min,
+        children: [
+          Icon(Icons.language_rounded, size: 18, color: AppTheme.accentAmber),
+          const SizedBox(width: 8),
+          DropdownButtonHideUnderline(
+            child: DropdownButton<AppLanguage>(
+              value: langProvider.language,
+              dropdownColor: AppTheme.surfaceElevated,
+              borderRadius: BorderRadius.circular(16),
+              icon: Icon(Icons.keyboard_arrow_down_rounded, color: AppTheme.accentAmber, size: 20),
+              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+              items: languages.map((item) {
+                final lang = item['code'] as AppLanguage;
+                final label = item['label'] as String;
+                final flag = item['flag'] as String;
+                return DropdownMenuItem<AppLanguage>(
+                  value: lang,
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Text(flag, style: const TextStyle(fontSize: 16)),
+                      const SizedBox(width: 8),
+                      Text(label, style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                );
+              }).toList(),
+              onChanged: (newLang) {
+                if (newLang != null) {
+                  langProvider.setLanguage(newLang);
+                  langProvider.saveLanguage();
+                }
+              },
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  // ─── Show Shop Choice Popup Modal ───────────────────────────
+  void _showShopChoiceDialog() {
+    final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+
+    showDialog(
+      context: context,
+      barrierDismissible: false,
+      builder: (dlgCtx) => Dialog(
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
+        backgroundColor: AppTheme.surfaceCard,
+        child: Padding(
+          padding: const EdgeInsets.all(22),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Container(
+                padding: const EdgeInsets.all(12),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                  shape: BoxShape.circle,
+                ),
+                child: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber, size: 32),
+              ),
+              const SizedBox(height: 14),
+              Text(
+                context.tr('welcome_choose_account_type'),
+                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+                textAlign: TextAlign.center,
+              ),
+              const SizedBox(height: 20),
+
+              // Option 1: Create New Shop Card
+              InkWell(
+                onTap: () {
+                  Navigator.of(dlgCtx).pop();
+                  setState(() {
+                    _isRegistering = true;
+                    _shopRegistrationMode = 0;
+                    authProvider.clearError();
+                  });
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceElevated,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.accentAmber, width: 1.5),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentAmber,
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: const Icon(Icons.add_business_rounded, color: Colors.black, size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.tr('create_new_shop'),
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              context.tr('shop_owner_desc'),
+                              style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.white54),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 12),
+
+              // Option 2: Join Existing Shop Card
+              InkWell(
+                onTap: () {
+                  Navigator.of(dlgCtx).pop();
+                  setState(() {
+                    _isRegistering = true;
+                    _shopRegistrationMode = 1;
+                    authProvider.clearError();
+                  });
+                },
+                borderRadius: BorderRadius.circular(16),
+                child: Container(
+                  width: double.infinity,
+                  padding: const EdgeInsets.all(16),
+                  decoration: BoxDecoration(
+                    color: AppTheme.surfaceElevated,
+                    borderRadius: BorderRadius.circular(16),
+                    border: Border.all(color: AppTheme.borderSubtle, width: 1),
+                  ),
+                  child: Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(10),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceDark,
+                          borderRadius: BorderRadius.circular(12),
+                          border: Border.all(color: AppTheme.borderSubtle),
+                        ),
+                        child: Icon(Icons.qr_code_rounded, color: AppTheme.accentAmber, size: 24),
+                      ),
+                      const SizedBox(width: 14),
+                      Expanded(
+                        child: Column(
+                          crossAxisAlignment: CrossAxisAlignment.start,
+                          children: [
+                            Text(
+                              context.tr('join_existing_shop'),
+                              style: const TextStyle(fontSize: 15, fontWeight: FontWeight.bold),
+                            ),
+                            const SizedBox(height: 3),
+                            Text(
+                              context.tr('shop_worker_desc'),
+                              style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                            ),
+                          ],
+                        ),
+                      ),
+                      const Icon(Icons.arrow_forward_ios_rounded, size: 16, color: Colors.white54),
+                    ],
+                  ),
+                ),
+              ),
+              const SizedBox(height: 16),
+
+              TextButton(
+                onPressed: () => Navigator.of(dlgCtx).pop(),
+                child: Text(
+                  context.tr('cancel'),
+                  style: TextStyle(color: AppTheme.textMuted),
+                ),
+              ),
+            ],
           ),
         ),
       ),

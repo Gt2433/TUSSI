@@ -7,6 +7,8 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import '../providers/language_provider.dart';
+import '../utils/payment_dialog.dart';
+import '../utils/order_share_helper.dart';
 
 /// Card widget displaying a complete order with fabric entries,
 /// lengths, multipliers, and an optional action button.
@@ -136,32 +138,43 @@ class OrderCard extends StatelessWidget {
                     ],
                   ),
                 ),
+                // Share / Export Button
+                IconButton(
+                  icon: Icon(Icons.share_rounded, color: AppTheme.accentAmber, size: 20),
+                  tooltip: 'مشاركة / تصدير (Share / Export)',
+                  onPressed: () => OrderShareHelper.showShareModal(context, order),
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.1),
+                    padding: const EdgeInsets.all(4),
+                  ),
+                ),
                 if (showStatus) ...[
+                  const SizedBox(width: 8),
                   _StatusBadge(status: order.status),
-                  if (onRestore != null) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(Icons.restore_rounded, color: AppTheme.accentAmber, size: 20),
-                      tooltip: 'إعادة فتح الطلب (Restore)',
-                      onPressed: onRestore,
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppTheme.surfaceElevated,
-                        padding: const EdgeInsets.all(4),
-                      ),
+                ],
+                if (showStatus && onRestore != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: Icon(Icons.restore_rounded, color: AppTheme.accentAmber, size: 20),
+                    tooltip: 'إعادة فتح الطلب (Restore)',
+                    onPressed: onRestore,
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.surfaceElevated,
+                      padding: const EdgeInsets.all(4),
                     ),
-                  ],
-                  if (onDelete != null) ...[
-                    const SizedBox(width: 8),
-                    IconButton(
-                      icon: Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
-                      tooltip: 'حذف الطلب نهائياً',
-                      onPressed: onDelete,
-                      style: IconButton.styleFrom(
-                        backgroundColor: AppTheme.errorSurface,
-                        padding: const EdgeInsets.all(4),
-                      ),
+                  ),
+                ],
+                if (showStatus && onDelete != null) ...[
+                  const SizedBox(width: 8),
+                  IconButton(
+                    icon: Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
+                    tooltip: 'حذف الطلب نهائياً',
+                    onPressed: onDelete,
+                    style: IconButton.styleFrom(
+                      backgroundColor: AppTheme.errorSurface,
+                      padding: const EdgeInsets.all(4),
                     ),
-                  ],
+                  ),
                 ],
               ],
             ),
@@ -295,7 +308,13 @@ class OrderCard extends StatelessWidget {
               
               // Voice Note Player
               if (order.voiceNoteBase64 != null && order.voiceNoteBase64!.isNotEmpty)
-                _OrderVoiceNotePlayer(base64String: order.voiceNoteBase64!),
+                OrderVoiceNotePlayer(base64String: order.voiceNoteBase64!),
+
+              // ─── Payment Status Bar ──────────────────────────────
+              if (!order.isDraft) ...[
+                const SizedBox(height: 12),
+                _PaymentStatusBar(order: order),
+              ],
             ],
 
             // ─── Done/Resume/Recall Buttons ─────────────────────
@@ -321,12 +340,13 @@ class OrderCard extends StatelessWidget {
                       Expanded(
                         child: ElevatedButton.icon(
                           onPressed: onResume,
-                          icon: const Icon(Icons.play_arrow_rounded, size: 20),
+                          icon: const Icon(Icons.play_arrow_rounded, size: 16),
                           label: const Text('استئناف  Resume'),
                           style: ElevatedButton.styleFrom(
                             backgroundColor: Colors.orange.shade800,
                             foregroundColor: Colors.white,
-                            padding: const EdgeInsets.symmetric(vertical: 14),
+                            padding: const EdgeInsets.symmetric(vertical: 8),
+                            textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
                           ),
                         ),
                       ),
@@ -351,6 +371,125 @@ class OrderCard extends StatelessWidget {
             ],
           ],
         ),
+      ),
+    );
+  }
+}
+
+// ─── Payment Status Bar ───────────────────────────────────────────────────
+class _PaymentStatusBar extends StatelessWidget {
+  final Order order;
+  const _PaymentStatusBar({required this.order});
+
+  @override
+  Widget build(BuildContext context) {
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+    final total = order.computedTotal;
+    final paid = order.paidAmount ?? 0.0;
+    final balance = order.balanceDue;
+    final progress = total > 0 ? (paid / total).clamp(0.0, 1.0) : 0.0;
+
+    Color statusColor;
+    String statusLabel;
+    switch (order.paymentStatus) {
+      case 'paid':
+        statusColor = AppTheme.success;
+        statusLabel = isAr ? 'مدفوع ✅' : 'Paid ✅';
+        break;
+      case 'partial':
+        statusColor = Colors.orange;
+        statusLabel = isAr ? 'دفع جزئي 🔶' : 'Partial 🔶';
+        break;
+      default:
+        statusColor = AppTheme.error;
+        statusLabel = isAr ? 'لم يُدفع ❌' : 'Unpaid ❌';
+    }
+
+    return Container(
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        color: statusColor.withValues(alpha: 0.06),
+        borderRadius: BorderRadius.circular(12),
+        border: Border.all(color: statusColor.withValues(alpha: 0.25)),
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.payments_rounded, size: 14, color: statusColor),
+                  const SizedBox(width: 6),
+                  Text(
+                    isAr ? 'حالة الدفع:' : 'Payment:',
+                    style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                  ),
+                  const SizedBox(width: 6),
+                  Text(statusLabel,
+                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: statusColor)),
+                ],
+              ),
+              GestureDetector(
+                onTap: () => showPaymentDialog(context, order),
+                child: Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                    borderRadius: BorderRadius.circular(8),
+                    border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.4)),
+                  ),
+                  child: Row(
+                    mainAxisSize: MainAxisSize.min,
+                    children: [
+                      Icon(Icons.edit_rounded, size: 11, color: AppTheme.accentAmber),
+                      const SizedBox(width: 4),
+                      Text(
+                        isAr ? 'تسجيل' : 'Pay',
+                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.accentAmber),
+                      ),
+                    ],
+                  ),
+                ),
+              ),
+            ],
+          ),
+          if (order.paymentStatus != 'unpaid') ...[
+            const SizedBox(height: 8),
+            Row(
+              mainAxisAlignment: MainAxisAlignment.spaceBetween,
+              children: [
+                Text(
+                  '${paid.toStringAsFixed(0)} / ${total.toStringAsFixed(0)} د.ج',
+                  style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                ),
+                Text(
+                  balance > 0.5
+                      ? '${isAr ? "متبقي" : "Due"}: ${balance.toStringAsFixed(0)} د.ج'
+                      : balance < -0.5
+                          ? '${isAr ? "باقي للزبون" : "Change"}: ${balance.abs().toStringAsFixed(0)} د.ج'
+                          : '',
+                  style: TextStyle(
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                    color: balance > 0.5 ? AppTheme.error : Colors.tealAccent,
+                  ),
+                ),
+              ],
+            ),
+            const SizedBox(height: 6),
+            ClipRRect(
+              borderRadius: BorderRadius.circular(6),
+              child: LinearProgressIndicator(
+                value: progress,
+                minHeight: 5,
+                backgroundColor: AppTheme.borderSubtle,
+                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
+              ),
+            ),
+          ],
+        ],
       ),
     );
   }
@@ -598,16 +737,16 @@ class _StatusBadge extends StatelessWidget {
   }
 }
 
-class _OrderVoiceNotePlayer extends StatefulWidget {
+class OrderVoiceNotePlayer extends StatefulWidget {
   final String base64String;
 
-  const _OrderVoiceNotePlayer({required this.base64String});
+  const OrderVoiceNotePlayer({required this.base64String});
 
   @override
-  State<_OrderVoiceNotePlayer> createState() => _OrderVoiceNotePlayerState();
+  State<OrderVoiceNotePlayer> createState() => _OrderVoiceNotePlayerState();
 }
 
-class _OrderVoiceNotePlayerState extends State<_OrderVoiceNotePlayer> {
+class _OrderVoiceNotePlayerState extends State<OrderVoiceNotePlayer> {
   late AudioPlayer _audioPlayer;
   bool _isPlaying = false;
   Duration _position = Duration.zero;
@@ -615,6 +754,9 @@ class _OrderVoiceNotePlayerState extends State<_OrderVoiceNotePlayer> {
   StreamSubscription? _posSub;
   StreamSubscription? _durSub;
   StreamSubscription? _compSub;
+
+  double _playbackRate = 1.0;
+  bool _isPaused = false;
 
   @override
   void initState() {
@@ -631,6 +773,7 @@ class _OrderVoiceNotePlayerState extends State<_OrderVoiceNotePlayer> {
         setState(() {
           _isPlaying = false;
           _position = Duration.zero;
+          _isPaused = false;
         });
       }
     });
@@ -648,13 +791,28 @@ class _OrderVoiceNotePlayerState extends State<_OrderVoiceNotePlayer> {
   Future<void> _playPause() async {
     if (_isPlaying) {
       await _audioPlayer.pause();
-      if (mounted) setState(() => _isPlaying = false);
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _isPaused = true;
+        });
+      }
     } else {
       try {
-        final bytes = base64Decode(widget.base64String);
-        await _audioPlayer.stop();
-        await _audioPlayer.play(BytesSource(Uint8List.fromList(bytes)));
-        if (mounted) setState(() => _isPlaying = true);
+        if (_isPaused) {
+          await _audioPlayer.resume();
+        } else {
+          final bytes = base64Decode(widget.base64String);
+          await _audioPlayer.stop();
+          await _audioPlayer.play(BytesSource(Uint8List.fromList(bytes)));
+        }
+        await _audioPlayer.setPlaybackRate(_playbackRate);
+        if (mounted) {
+          setState(() {
+            _isPlaying = true;
+            _isPaused = false;
+          });
+        }
       } catch (e) {
         print('Playback error: $e');
       }
@@ -680,59 +838,90 @@ class _OrderVoiceNotePlayerState extends State<_OrderVoiceNotePlayer> {
         borderRadius: BorderRadius.circular(12),
         border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.15)),
       ),
-      child: Row(
+      child: Column(
         children: [
-          IconButton(
-            icon: Icon(
-              _isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
-              color: AppTheme.accentAmber,
-              size: 32,
-            ),
-            onPressed: _playPause,
-            padding: EdgeInsets.zero,
-            constraints: const BoxConstraints(),
+          Row(
+            children: [
+              IconButton(
+                icon: Icon(
+                  _isPlaying ? Icons.pause_circle_filled_rounded : Icons.play_circle_fill_rounded,
+                  color: AppTheme.accentAmber,
+                  size: 32,
+                ),
+                onPressed: _playPause,
+                padding: EdgeInsets.zero,
+                constraints: const BoxConstraints(),
+              ),
+              const SizedBox(width: 8),
+              Expanded(
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
+                  children: [
+                    SliderTheme(
+                      data: SliderThemeData(
+                        trackHeight: 2.0,
+                        thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.0),
+                        overlayShape: const RoundSliderOverlayShape(overlayRadius: 10.0),
+                        activeTrackColor: AppTheme.accentAmber,
+                        inactiveTrackColor: AppTheme.borderSubtle,
+                        thumbColor: AppTheme.accentAmber,
+                      ),
+                      child: Slider(
+                        value: _position.inMilliseconds.toDouble(),
+                        max: _duration.inMilliseconds.toDouble().clamp(0.1, double.infinity),
+                        onChanged: (val) async {
+                          final target = Duration(milliseconds: val.toInt());
+                          await _audioPlayer.seek(target);
+                        },
+                      ),
+                    ),
+                    Padding(
+                      padding: const EdgeInsets.symmetric(horizontal: 8),
+                      child: Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            _formatDuration(_position),
+                            style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                          ),
+                          Text(
+                            _formatDuration(_duration),
+                            style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+            ],
           ),
-          const SizedBox(width: 8),
-          Expanded(
-            child: Column(
-              crossAxisAlignment: CrossAxisAlignment.start,
-              children: [
-                SliderTheme(
-                  data: SliderThemeData(
-                    trackHeight: 2.0,
-                    thumbShape: const RoundSliderThumbShape(enabledThumbRadius: 5.0),
-                    overlayShape: const RoundSliderOverlayShape(overlayRadius: 10.0),
-                    activeTrackColor: AppTheme.accentAmber,
-                    inactiveTrackColor: AppTheme.borderSubtle,
-                    thumbColor: AppTheme.accentAmber,
-                  ),
-                  child: Slider(
-                    value: _position.inMilliseconds.toDouble(),
-                    max: _duration.inMilliseconds.toDouble().clamp(0.1, double.infinity),
-                    onChanged: (val) async {
-                      final target = Duration(milliseconds: val.toInt());
-                      await _audioPlayer.seek(target);
-                    },
-                  ),
+          const SizedBox(height: 6),
+          Wrap(
+            spacing: 6,
+            runSpacing: 6,
+            children: [1.0, 1.3, 1.5, 2.0].map((rate) {
+              final isSelected = _playbackRate == rate;
+              return ChoiceChip(
+                label: Text('${rate.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}x'),
+                selected: isSelected,
+                onSelected: (val) async {
+                  if (val) {
+                    setState(() => _playbackRate = rate);
+                    await _audioPlayer.setPlaybackRate(rate);
+                  }
+                },
+                selectedColor: AppTheme.accentAmber,
+                backgroundColor: AppTheme.surfaceDark,
+                labelStyle: TextStyle(
+                  color: isSelected ? Colors.black : AppTheme.accentAmber,
+                  fontSize: 10,
+                  fontWeight: FontWeight.bold,
                 ),
-                Padding(
-                  padding: const EdgeInsets.symmetric(horizontal: 8),
-                  child: Row(
-                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                    children: [
-                      Text(
-                        _formatDuration(_position),
-                        style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
-                      ),
-                      Text(
-                        _formatDuration(_duration),
-                        style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
-                      ),
-                    ],
-                  ),
-                ),
-              ],
-            ),
+                padding: EdgeInsets.zero,
+                materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+              );
+            }).toList(),
           ),
         ],
       ),
@@ -758,6 +947,9 @@ class _QuickOrderVoiceNotePlayerState extends State<_QuickOrderVoiceNotePlayer> 
   StreamSubscription? _durSub;
   StreamSubscription? _compSub;
 
+  double _playbackRate = 1.0;
+  bool _isPaused = false;
+
   @override
   void initState() {
     super.initState();
@@ -773,6 +965,7 @@ class _QuickOrderVoiceNotePlayerState extends State<_QuickOrderVoiceNotePlayer> 
         setState(() {
           _isPlaying = false;
           _position = Duration.zero;
+          _isPaused = false;
         });
       }
     });
@@ -790,13 +983,28 @@ class _QuickOrderVoiceNotePlayerState extends State<_QuickOrderVoiceNotePlayer> 
   Future<void> _playPause() async {
     if (_isPlaying) {
       await _audioPlayer.pause();
-      if (mounted) setState(() => _isPlaying = false);
+      if (mounted) {
+        setState(() {
+          _isPlaying = false;
+          _isPaused = true;
+        });
+      }
     } else {
       try {
-        final bytes = base64Decode(widget.base64String);
-        await _audioPlayer.stop();
-        await _audioPlayer.play(BytesSource(Uint8List.fromList(bytes)));
-        if (mounted) setState(() => _isPlaying = true);
+        if (_isPaused) {
+          await _audioPlayer.resume();
+        } else {
+          final bytes = base64Decode(widget.base64String);
+          await _audioPlayer.stop();
+          await _audioPlayer.play(BytesSource(Uint8List.fromList(bytes)));
+        }
+        await _audioPlayer.setPlaybackRate(_playbackRate);
+        if (mounted) {
+          setState(() {
+            _isPlaying = true;
+            _isPaused = false;
+          });
+        }
       } catch (e) {
         print('Playback error: $e');
       }
@@ -915,6 +1123,36 @@ class _QuickOrderVoiceNotePlayerState extends State<_QuickOrderVoiceNotePlayer> 
                 tooltip: 'تقدم ثانيتين (Forward 2s)',
               ),
             ],
+          ),
+          const SizedBox(height: 12),
+          // Speed controls: 1x, 1.3x, 1.5x, 2x
+          Row(
+            mainAxisAlignment: MainAxisAlignment.center,
+            children: [1.0, 1.3, 1.5, 2.0].map((rate) {
+              final isSelected = _playbackRate == rate;
+              return Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 4),
+                child: ChoiceChip(
+                  label: Text('${rate.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')}x'),
+                  selected: isSelected,
+                  onSelected: (val) async {
+                    if (val) {
+                      setState(() => _playbackRate = rate);
+                      await _audioPlayer.setPlaybackRate(rate);
+                    }
+                  },
+                  selectedColor: Colors.purpleAccent,
+                  backgroundColor: Colors.purple.shade900.withOpacity(0.2),
+                  labelStyle: TextStyle(
+                    color: isSelected ? Colors.white : Colors.purpleAccent,
+                    fontSize: 10,
+                    fontWeight: FontWeight.bold,
+                  ),
+                  padding: EdgeInsets.zero,
+                  materialTapTargetSize: MaterialTapTargetSize.shrinkWrap,
+                ),
+              );
+            }).toList(),
           ),
         ],
       ),

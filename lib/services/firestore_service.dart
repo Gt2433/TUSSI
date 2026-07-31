@@ -89,6 +89,36 @@ class FirestoreService {
     }
   }
 
+  // ─── Payment Tracking ──────────────────────────────────────────
+
+  /// Update payment info on an existing order document.
+  Future<void> updateOrderPayment({
+    required String orderId,
+    double? finalPrice,
+    required double paidAmount,
+    required String paymentStatus,
+  }) async {
+    final data = <String, dynamic>{
+      'paidAmount': paidAmount,
+      'paymentStatus': paymentStatus,
+    };
+    if (finalPrice != null) data['finalPrice'] = finalPrice;
+    await _firestore.collection('orders').doc(orderId).update(data);
+  }
+
+  /// Stream orders that have payment status 'unpaid' or 'partial' for a given receiver.
+  Stream<List<Order>> streamDebtOrders(String receiverId) {
+    return _firestore
+        .collection('orders')
+        .where('receiverId', isEqualTo: receiverId)
+        .where('paymentStatus', whereIn: ['unpaid', 'partial'])
+        .snapshots()
+        .map((snap) => snap.docs
+            .map((d) => Order.fromMap(d.data(), d.id))
+            .toList()
+          ..sort((a, b) => b.createdAt.compareTo(a.createdAt)));
+  }
+
   // ─── Saved Lengths (Fabric-Specific Sync) ─────────────────────
 
   /// Stream all globally saved lengths (deprecated)
@@ -676,4 +706,100 @@ class FirestoreService {
       'isActive': isActive,
     });
   }
+
+  // ─── Free Registration & Shop Code System ───────────────────────
+
+  /// Generate a unique 6-digit shop code
+  String _generateShopCode(String shopName) {
+    final cleanName = shopName.replaceAll(RegExp(r'[^\w\s]'), '').trim();
+    final prefix = cleanName.length >= 3 
+        ? cleanName.substring(0, 3).toUpperCase() 
+        : 'SHOP';
+    final randomNum = (1000 + (DateTime.now().millisecondsSinceEpoch % 8999)).toString();
+    return '$prefix-$randomNum';
+  }
+
+  /// Create a new shop & register its admin user (100% Free)
+  Future<Map<String, String>> createNewShop({
+    required String shopName,
+    required String ownerUid,
+    required String ownerEmail,
+    required String ownerName,
+    String? password,
+    String? photoBase64,
+  }) async {
+    final shopCode = _generateShopCode(shopName);
+    final shopRef = _firestore.collection('shops').doc();
+    final shopId = shopRef.id;
+
+    final batch = _firestore.batch();
+
+    // 1. Create Shop Document
+    batch.set(shopRef, {
+      'shopId': shopId,
+      'name': shopName.trim(),
+      'shopCode': shopCode,
+      'ownerUid': ownerUid,
+      'isActive': true,
+      'subscriptionExpiresAt': Timestamp.fromDate(DateTime.now().add(const Duration(days: 3650))), // 10 years free
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    // 2. Create Owner User Document
+    final userRef = _firestore.collection('users').doc(ownerUid);
+    batch.set(userRef, {
+      'uid': ownerUid,
+      'email': ownerEmail.trim(),
+      'displayName': ownerName.trim(),
+      'password': password,
+      'role': 'shop_admin',
+      'shopId': shopId,
+      'shopCode': shopCode,
+      'photoBase64': photoBase64,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    await batch.commit();
+    return {'shopId': shopId, 'shopCode': shopCode};
+  }
+
+  /// Join an existing shop using a shop code (100% Free)
+  Future<Map<String, String>> joinShopByCode({
+    required String shopCode,
+    required String userUid,
+    required String userEmail,
+    required String userName,
+    String? password,
+    String? photoBase64,
+  }) async {
+    final cleanCode = shopCode.trim().toUpperCase();
+    final shopQuery = await _firestore
+        .collection('shops')
+        .where('shopCode', isEqualTo: cleanCode)
+        .limit(1)
+        .get();
+
+    if (shopQuery.docs.isEmpty) {
+      throw Exception('كود المحل غير صحيح أو غير موجود');
+    }
+
+    final shopDoc = shopQuery.docs.first;
+    final shopId = shopDoc.id;
+    final shopName = shopDoc.data()['name'] as String? ?? '';
+
+    await _firestore.collection('users').doc(userUid).set({
+      'uid': userUid,
+      'email': userEmail.trim(),
+      'displayName': userName.trim(),
+      'password': password,
+      'role': 'shop_employee',
+      'shopId': shopId,
+      'shopCode': cleanCode,
+      'photoBase64': photoBase64,
+      'createdAt': FieldValue.serverTimestamp(),
+    });
+
+    return {'shopId': shopId, 'shopName': shopName, 'shopCode': cleanCode};
+  }
 }
+

@@ -8,6 +8,7 @@ import '../theme/app_theme.dart';
 import '../widgets/order_card.dart';
 import '../providers/order_provider.dart';
 import 'home_screen.dart';
+import 'payments_screen.dart';
 
 /// Screen showing pending orders assigned to (Inbox) or sent by (Sent) the current user.
 /// Supports real-time updates, tab switching, completions, and recall/editing.
@@ -20,6 +21,70 @@ class OrdersScreen extends StatefulWidget {
 
 class _OrdersScreenState extends State<OrdersScreen> {
   final FirestoreService _firestoreService = FirestoreService();
+  String _searchQuery = '';
+
+  void _showQRScanDialog(BuildContext context) {
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+    final codeCtrl = TextEditingController();
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceCard,
+        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
+        title: Row(
+          children: [
+            Icon(Icons.qr_code_scanner_rounded, color: AppTheme.accentAmber),
+            const SizedBox(width: 8),
+            Text(isAr ? 'مسح / بحث كود QR' : 'Scan Order QR Code', style: const TextStyle(fontSize: 16)),
+          ],
+        ),
+        content: Column(
+          mainAxisSize: MainAxisSize.min,
+          crossAxisAlignment: CrossAxisAlignment.start,
+          children: [
+            Text(
+              isAr ? 'أدخل كود الطلبية أو قم بمسحه بالماسح الضوئي:' : 'Enter or scan the Order QR code:',
+              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
+            ),
+            const SizedBox(height: 14),
+            TextField(
+              controller: codeCtrl,
+              autofocus: true,
+              decoration: InputDecoration(
+                labelText: isAr ? 'رقم الطلب / كود QR' : 'Order ID / QR Code',
+                prefixIcon: const Icon(Icons.qr_code_2_rounded),
+                hintText: '...',
+              ),
+            ),
+          ],
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(dlgCtx).pop(),
+            child: Text(isAr ? 'إلغاء' : 'Cancel'),
+          ),
+          ElevatedButton(
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accentAmber,
+              foregroundColor: Colors.black,
+            ),
+            onPressed: () {
+              final code = codeCtrl.text.trim();
+              if (code.isNotEmpty) {
+                setState(() => _searchQuery = code);
+                Navigator.of(dlgCtx).pop();
+                ScaffoldMessenger.of(context).showSnackBar(
+                  SnackBar(content: Text(isAr ? 'تم تصفية الطلبيات برقم الكود 🔍' : 'Filtered by Order ID 🔍')),
+                );
+              }
+            },
+            child: Text(isAr ? 'بحث' : 'Search'),
+          ),
+        ],
+      ),
+    );
+  }
 
   Future<void> _markDone(Order order) async {
     try {
@@ -66,9 +131,49 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
 
     return DefaultTabController(
-      length: 2,
+      length: 3,
       child: Column(
         children: [
+          // ─── Search & QR Scanner Header ────────────────────────
+          Container(
+            color: AppTheme.surfaceDark,
+            padding: const EdgeInsets.fromLTRB(16, 8, 16, 4),
+            child: Row(
+              children: [
+                Expanded(
+                  child: Container(
+                    height: 42,
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceElevated,
+                      borderRadius: BorderRadius.circular(12),
+                      border: Border.all(color: AppTheme.borderSubtle),
+                    ),
+                    child: TextField(
+                      onChanged: (val) => setState(() => _searchQuery = val.trim()),
+                      decoration: InputDecoration(
+                        hintText: isAr ? 'بحث برقم الطلبية أو الزبون...' : 'Search Order ID or Customer...',
+                        hintStyle: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                        prefixIcon: const Icon(Icons.search_rounded, size: 18),
+                        border: InputBorder.none,
+                        contentPadding: const EdgeInsets.symmetric(vertical: 10),
+                      ),
+                    ),
+                  ),
+                ),
+                const SizedBox(width: 8),
+                IconButton(
+                  icon: Icon(Icons.qr_code_scanner_rounded, color: AppTheme.accentAmber),
+                  tooltip: isAr ? 'مسح رمز QR للطلبية' : 'Scan Order QR',
+                  style: IconButton.styleFrom(
+                    backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.15),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                  ),
+                  onPressed: () => _showQRScanDialog(context),
+                ),
+              ],
+            ),
+          ),
+
           // ─── Custom TabBar ─────────────────────────────────
           Container(
             color: AppTheme.surfaceDark,
@@ -88,10 +193,20 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 indicatorSize: TabBarIndicatorSize.tab,
                 labelColor: AppTheme.surfaceDark,
                 unselectedLabelColor: AppTheme.textMuted,
-                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 14),
+                labelStyle: const TextStyle(fontWeight: FontWeight.bold, fontSize: 13),
                 tabs: [
-                  Tab(text: isAr ? 'الواردة (Inbox)' : 'Received'),
-                  Tab(text: isAr ? 'المرسلة (Sent)' : 'Sent'),
+                  Tab(text: isAr ? 'الواردة' : 'Received'),
+                  Tab(text: isAr ? 'المرسلة' : 'Sent'),
+                  Tab(
+                    child: Row(
+                      mainAxisAlignment: MainAxisAlignment.center,
+                      children: [
+                        const Icon(Icons.account_balance_wallet_rounded, size: 14),
+                        const SizedBox(width: 4),
+                        Text(isAr ? 'الذمم' : 'Debts'),
+                      ],
+                    ),
+                  ),
                 ],
               ),
             ),
@@ -105,6 +220,8 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 _buildIncomingTab(uid),
                 // 2. Outgoing Tab (Sent)
                 _buildSentTab(uid),
+                // 3. Debts Tab (الذمم)
+                const PaymentsScreen(),
               ],
             ),
           ),
@@ -143,7 +260,16 @@ class _OrdersScreenState extends State<OrdersScreen> {
           );
         }
 
-        final orders = snapshot.data ?? [];
+        var orders = snapshot.data ?? [];
+        if (_searchQuery.isNotEmpty) {
+          final q = _searchQuery.toLowerCase();
+          orders = orders.where((o) =>
+            o.id.toLowerCase().contains(q) ||
+            o.senderName.toLowerCase().contains(q) ||
+            o.receiverName.toLowerCase().contains(q) ||
+            (o.customerName != null && o.customerName!.toLowerCase().contains(q))
+          ).toList();
+        }
 
         if (orders.isEmpty) {
           return Center(

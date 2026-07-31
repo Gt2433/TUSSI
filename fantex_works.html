@@ -972,6 +972,7 @@ function OrdersTab({ userData, db, fb }) {
   const [warehouseMembers, setWarehouseMembers] = useState([]);
   const [showNew, setShowNew] = useState(false);
   const [cart, setCart] = useState([]);
+  const [cartBackup, setCartBackup] = useState(null);
   const [selectedFabric, setSelectedFabric] = useState("");
   const [selectedWarehouse, setSelectedWarehouse] = useState("");
   const [quantities, setQuantities] = useState({});
@@ -985,6 +986,7 @@ function OrdersTab({ userData, db, fb }) {
   const [duration, setDuration] = useState(0);
   const [voiceBase64, setVoiceBase64] = useState(null);
   const [playing, setPlaying] = useState(false);
+  const [playbackRate, setPlaybackRate] = useState(1.0);
   const [waveHeights, setWaveHeights] = useState([4, 4, 4, 4, 4, 4, 4, 4]);
 
   const mediaRecorderRef = React.useRef(null);
@@ -1039,6 +1041,12 @@ function OrdersTab({ userData, db, fb }) {
     else setCart([...cart, { fabricId:selectedFabric, fabricName:selectedFab.name, color:colorName, colorHex, quantity:qty, price:selectedFab.price, total:selectedFab.price*qty }]);
   };
 
+  const removeItemFromCart = (index) => {
+    const item = cart[index];
+    setCartBackup({ item, index });
+    setCart(cart.filter((_, j) => j !== index));
+  };
+
   const submitOrder = async () => {
     if (cart.length===0||!selectedWarehouse) { alert("يرجى اختيار المخزن وإضافة أصناف للطلبية"); return; }
     const total = cart.reduce((s,i)=>s+i.total,0);
@@ -1053,6 +1061,7 @@ function OrdersTab({ userData, db, fb }) {
       });
       await notifyWarehouseTeam(db, fb, selectedWarehouse, `📦 طلبية جديدة من ${userData?.name}`, `محل: ${userData?.shopId} — إجمالي: ${total.toLocaleString()} د.ج`);
       setCart([]); setSelectedFabric(""); setSelectedWarehouse(""); setQuantities({}); setShowNew(false);
+      setCartBackup(null);
     } catch(e) { alert("خطأ في إنشاء الطلبية"); }
   };
 
@@ -1138,6 +1147,7 @@ function OrdersTab({ userData, db, fb }) {
     setVoiceBase64(null);
     setDuration(0);
     setPlaying(false);
+    setPlaybackRate(1.0);
   };
 
   const togglePlayback = () => {
@@ -1146,16 +1156,24 @@ function OrdersTab({ userData, db, fb }) {
       if (audioRef.current) audioRef.current.pause();
       setPlaying(false);
     } else {
-      const audio = new Audio("data:audio/webm;base64," + voiceBase64);
-      audio.onended = () => setPlaying(false);
-      audioRef.current = audio;
-      audio.play().catch(e => {
-        const retryAudio = new Audio("data:audio/mp3;base64," + voiceBase64);
-        retryAudio.onended = () => setPlaying(false);
-        audioRef.current = retryAudio;
-        retryAudio.play().catch(() => {});
-      });
-      setPlaying(true);
+      if (audioRef.current && !audioRef.current.ended) {
+        audioRef.current.playbackRate = playbackRate;
+        audioRef.current.play().catch(() => {});
+        setPlaying(true);
+      } else {
+        const audio = new Audio("data:audio/webm;base64," + voiceBase64);
+        audio.onended = () => setPlaying(false);
+        audio.playbackRate = playbackRate;
+        audioRef.current = audio;
+        audio.play().catch(e => {
+          const retryAudio = new Audio("data:audio/mp3;base64," + voiceBase64);
+          retryAudio.onended = () => setPlaying(false);
+          retryAudio.playbackRate = playbackRate;
+          audioRef.current = retryAudio;
+          retryAudio.play().catch(() => {});
+        });
+        setPlaying(true);
+      }
     }
   };
 
@@ -1275,9 +1293,25 @@ function OrdersTab({ userData, db, fb }) {
                 </div>
               )}
               {/* Cart */}
-              {cart.length>0 && (
+              {(cart.length>0 || cartBackup) && (
                 <div className="space-y-2">
-                  <p className="text-sm text-gray-400">عناصر الطلبية:</p>
+                  <div className="flex justify-between items-center flex-wrap gap-2">
+                    <p className="text-sm text-gray-400">عناصر الطلبية:</p>
+                    {cartBackup && (
+                      <button
+                        type="button"
+                        onClick={() => {
+                          const newCart = [...cart];
+                          newCart.splice(cartBackup.index, 0, cartBackup.item);
+                          setCart(newCart);
+                          setCartBackup(null);
+                        }}
+                        className="text-xs text-yellow-500 hover:text-yellow-400 font-semibold flex items-center gap-1 transition-all bg-yellow-500/10 border border-yellow-500/20 px-3 py-1.5 rounded-lg"
+                      >
+                        ↩️ تراجع عن الحذف ({cartBackup.item.fabricName} — {cartBackup.item.color})
+                      </button>
+                    )}
+                  </div>
                   {cart.map((item,i)=>(
                     <div key={i} className="flex items-center justify-between p-3 rounded-lg bg-gray-900/50 border border-gray-800">
                       <div className="flex items-center gap-3">
@@ -1286,14 +1320,16 @@ function OrdersTab({ userData, db, fb }) {
                       </div>
                       <div className="flex items-center gap-3">
                         <span className="font-semibold text-sm">{item.total?.toLocaleString()} د.ج</span>
-                        <button onClick={()=>setCart(cart.filter((_,j)=>j!==i))} className="text-red-400 text-sm hover:text-red-300">✕</button>
+                        <button onClick={()=>removeItemFromCart(i)} className="text-gray-500 text-xs hover:text-red-400 transition-colors p-1" title="حذف">✕</button>
                       </div>
                     </div>
                   ))}
-                  <div className="flex justify-between items-center pt-3 border-t border-gray-800">
-                    <p className="font-bold">الإجمالي: {cart.reduce((s,i)=>s+i.total,0).toLocaleString()} د.ج</p>
-                    <button onClick={submitOrder} className="shiny-btn px-8 py-3 rounded-xl text-white font-semibold relative overflow-hidden"><span className="relative z-10">إرسال الطلبية</span></button>
-                  </div>
+                  {cart.length > 0 && (
+                    <div className="flex justify-between items-center pt-3 border-t border-gray-800">
+                      <p className="font-bold">الإجمالي: {cart.reduce((s,i)=>s+i.total,0).toLocaleString()} د.ج</p>
+                      <button onClick={submitOrder} className="shiny-btn px-8 py-3 rounded-xl text-white font-semibold relative overflow-hidden"><span className="relative z-10">إرسال الطلبية</span></button>
+                    </div>
+                  )}
                 </div>
               )}
             </div>
@@ -1392,6 +1428,25 @@ function OrdersTab({ userData, db, fb }) {
                     {recording && !paused && <div className="recording-dot-rec"></div>}
                     <div className="timer-rec">{formatTime(duration)}</div>
                   </div>
+                  {voiceBase64 && !recording && (
+                    <div className="flex gap-2 justify-center mt-3">
+                      {[1.0, 1.3, 1.5, 2.0].map(rate => (
+                        <button
+                          key={rate}
+                          type="button"
+                          onClick={() => {
+                            setPlaybackRate(rate);
+                            if (audioRef.current) {
+                              audioRef.current.playbackRate = rate;
+                            }
+                          }}
+                          className={`px-3 py-1 rounded-lg text-xs font-semibold border transition-all ${playbackRate === rate ? 'bg-green-600 border-green-500 text-white' : 'bg-gray-800 border-gray-700 text-gray-400 hover:text-white'}`}
+                        >
+                          {rate === 1.0 ? '1x' : rate + 'x'}
+                        </button>
+                      ))}
+                    </div>
+                  )}
                 </div>
               </div>
 
