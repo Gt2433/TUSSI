@@ -14,6 +14,7 @@ import 'profile_screen.dart';
 import 'settings_screen.dart';
 import '../providers/order_provider.dart';
 import '../widgets/order_card.dart';
+import '../widgets/ai_assistant_dialog.dart';
 
 /// Main home screen with bottom navigation bar.
 /// Four tabs: Orders, New Order, History, Profile
@@ -265,6 +266,8 @@ class HomeScreenState extends State<HomeScreen> {
               tooltip: 'التنقل بين المحلات',
             ),
           const SizedBox(width: 4),
+
+
 
           // Sign out
           IconButton(

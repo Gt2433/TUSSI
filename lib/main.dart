@@ -26,8 +26,8 @@ void main() async {
   usePathUrlStrategy();
   WidgetsFlutterBinding.ensureInitialized();
 
-  // Disable Google Fonts runtime HTTP fetching to prevent startup hangs
-  GoogleFonts.config.allowRuntimeFetching = false;
+  // Enable Google Fonts runtime fetching
+  GoogleFonts.config.allowRuntimeFetching = true;
 
   // Initialize Firebase with hardcoded options (no google-services.json needed)
   await Firebase.initializeApp(
@@ -68,11 +68,11 @@ void main() async {
     ),
   );
 
-  runApp(const FantexApp());
+  runApp(const TussiApp());
 }
 
-class FantexApp extends StatelessWidget {
-  const FantexApp({super.key});
+class TussiApp extends StatelessWidget {
+  const TussiApp({super.key});
 
   @override
   Widget build(BuildContext context) {

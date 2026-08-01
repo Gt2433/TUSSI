@@ -65,3 +65,7 @@ scrcpy-win64-v3.3.4.zip
 
 # Video files
 vid/
+
+# Gemini temp scripts
+.gemini/
+

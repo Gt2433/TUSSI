@@ -115,7 +115,7 @@ class _SuperAdminScreenState extends State<SuperAdminScreen> with SingleTickerPr
   // ─── Share via WhatsApp ────────────────────────────────────────
   Future<void> _shareToWhatsApp(String code, String shopName) async {
     final message =
-        'مرحباً يا صاحب محل $shopName، كود التفعيل الخاص بك لتطبيق Fantex هو:\n\n👉 *$code*\n\nيرجى فتح التطبيق، النقر على "إنشاء حساب" ثم إدخال اسمك، إيميلك، وكلمة سر مع هذا الكود.';
+        'مرحباً يا صاحب محل $shopName، كود التفعيل الخاص بك لتطبيق TUSSI هو:\n\n👉 *$code*\n\nيرجى فتح التطبيق، النقر على "إنشاء حساب" ثم إدخال اسمك، إيميلك، وكلمة سر مع هذا الكود.';
     final encodedMessage = Uri.encodeComponent(message);
     final url = Uri.parse('https://wa.me/?text=$encodedMessage');
     if (await canLaunchUrl(url)) {

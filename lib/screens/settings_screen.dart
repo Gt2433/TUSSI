@@ -14,12 +14,13 @@ import '../models/order_model.dart';
 import 'super_admin_screen.dart';
 import '../models/user_model.dart';
 import 'help_guide_screen.dart';
+import 'ai_assistant_screen.dart';
 
 class SettingsScreen extends StatelessWidget {
   final bool isTab;
   const SettingsScreen({super.key, this.isTab = false});
 
-  static const String _kCurrentVersion = '3.0.0';
+  static const String _kCurrentVersion = '3.0.1';
 
   // ─── Show "About App" Dialog ──────────────────────────────────
   void _showAboutDialog(BuildContext context) {
@@ -659,6 +660,87 @@ class SettingsScreen extends StatelessWidget {
                 },
               ),
             ],
+
+            // ─── Group: AI Assistant ────────────────────────────
+            Text(
+              isAr ? 'الذكاء الاصطناعي والمساعدة' : 'AI Assistant & Support',
+              style: TextStyle(
+                fontSize: 13,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.accentAmber,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 10),
+            Container(
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceCard,
+                borderRadius: BorderRadius.circular(24),
+                border: Border.all(color: AppTheme.borderSubtle),
+              ),
+              child: Material(
+                color: Colors.transparent,
+                borderRadius: BorderRadius.circular(24),
+                child: InkWell(
+                  borderRadius: BorderRadius.circular(24),
+                  onTap: () => Navigator.push(
+                    context,
+                    MaterialPageRoute(builder: (context) => const AiAssistantScreen()),
+                  ),
+                  child: Padding(
+                    padding: const EdgeInsets.all(16),
+                    child: Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(10),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.3)),
+                          ),
+                          child: Icon(
+                            Icons.auto_awesome_rounded,
+                            color: AppTheme.accentAmber,
+                            size: 22,
+                          ),
+                        ),
+                        const SizedBox(width: 14),
+                        Expanded(
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Text(
+                                isAr ? 'مساعد TUSSI الذكي' : 'TUSSI AI Assistant',
+                                style: const TextStyle(
+                                  fontSize: 16,
+                                  fontWeight: FontWeight.bold,
+                                ),
+                              ),
+                              const SizedBox(height: 3),
+                              Text(
+                                isAr
+                                    ? 'مرشدك المدمج لشرح وتدريب استخدام التطبيق بالتفصيل'
+                                    : 'Interactive guide to learn all app features',
+                                style: TextStyle(
+                                  fontSize: 12,
+                                  color: AppTheme.textMuted,
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Icon(
+                          Icons.arrow_forward_ios_rounded,
+                          size: 16,
+                          color: AppTheme.accentAmber,
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+            ),
+            const SizedBox(height: 24),
 
             // ─── Group 1: Appearance & Language ─────────────────
             Text(

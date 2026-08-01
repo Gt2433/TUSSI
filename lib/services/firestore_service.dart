@@ -279,6 +279,35 @@ class FirestoreService {
 
   // ─── Orders ────────────────────────────────────────────────────
 
+  /// Get a single order by ID or Group ID
+  Future<Order?> getOrderById(String orderId) async {
+    try {
+      final doc = await _firestore.collection('orders').doc(orderId).get();
+      if (doc.exists && doc.data() != null) {
+        return Order.fromMap(doc.data()!, doc.id);
+      }
+      final snap = await _firestore
+          .collection('orders')
+          .where('groupId', isEqualTo: orderId)
+          .limit(1)
+          .get();
+      if (snap.docs.isNotEmpty) {
+        return Order.fromMap(snap.docs.first.data(), snap.docs.first.id);
+      }
+      final snap2 = await _firestore
+          .collection('orders')
+          .where('id', isEqualTo: orderId)
+          .limit(1)
+          .get();
+      if (snap2.docs.isNotEmpty) {
+        return Order.fromMap(snap2.docs.first.data(), snap2.docs.first.id);
+      }
+    } catch (e) {
+      print('Error fetching order by ID: $e');
+    }
+    return null;
+  }
+
   /// Create a new order
   Future<void> createOrder(Order order) async {
     await _firestore.collection('orders').doc(order.id).set(order.toMap());

@@ -1,7 +1,7 @@
 import 'package:flutter/material.dart';
 import 'package:google_fonts/google_fonts.dart';
 
-/// Fantex Design System
+/// TUSSI Design System
 /// A modern, premium theme supporting Light and Dark modes.
 class AppTheme {
   AppTheme._();
@@ -515,4 +515,10 @@ class AppTheme {
   static Color get error => isDark ? _errorDark : _errorLight;
   static Color get errorSurface => isDark ? _errorSurfaceDark : _errorSurfaceLight;
   static Color get info => _info;
+  static Color get primaryGold => const Color(0xFFF5C842);
+  static LinearGradient get goldGradient => const LinearGradient(
+        colors: [Color(0xFFF5C842), Color(0xFFD4A017)],
+        begin: Alignment.topLeft,
+        end: Alignment.bottomRight,
+      );
 }

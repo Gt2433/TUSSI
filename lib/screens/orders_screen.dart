@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'package:provider/provider.dart';
+import 'package:mobile_scanner/mobile_scanner.dart';
 import '../models/order_model.dart';
 import '../providers/auth_provider.dart' as app_auth;
 import '../providers/language_provider.dart';
@@ -7,6 +8,8 @@ import '../services/firestore_service.dart';
 import '../theme/app_theme.dart';
 import '../widgets/order_card.dart';
 import '../providers/order_provider.dart';
+import '../utils/order_share_helper.dart';
+import '../widgets/ai_assistant_dialog.dart';
 import 'home_screen.dart';
 import 'payments_screen.dart';
 
@@ -25,65 +28,224 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   void _showQRScanDialog(BuildContext context) {
     final isAr = context.tr('tab_orders') == 'الطلبيات';
-    final codeCtrl = TextEditingController();
-
-    showDialog(
-      context: context,
-      builder: (dlgCtx) => AlertDialog(
-        backgroundColor: AppTheme.surfaceCard,
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(20)),
-        title: Row(
-          children: [
-            Icon(Icons.qr_code_scanner_rounded, color: AppTheme.accentAmber),
-            const SizedBox(width: 8),
-            Text(isAr ? 'مسح / بحث كود QR' : 'Scan Order QR Code', style: const TextStyle(fontSize: 16)),
-          ],
-        ),
-        content: Column(
-          mainAxisSize: MainAxisSize.min,
-          crossAxisAlignment: CrossAxisAlignment.start,
-          children: [
-            Text(
-              isAr ? 'أدخل كود الطلبية أو قم بمسحه بالماسح الضوئي:' : 'Enter or scan the Order QR code:',
-              style: TextStyle(fontSize: 12, color: AppTheme.textSecondary),
-            ),
-            const SizedBox(height: 14),
-            TextField(
-              controller: codeCtrl,
-              autofocus: true,
-              decoration: InputDecoration(
-                labelText: isAr ? 'رقم الطلب / كود QR' : 'Order ID / QR Code',
-                prefixIcon: const Icon(Icons.qr_code_2_rounded),
-                hintText: '...',
-              ),
-            ),
-          ],
-        ),
-        actions: [
-          TextButton(
-            onPressed: () => Navigator.of(dlgCtx).pop(),
-            child: Text(isAr ? 'إلغاء' : 'Cancel'),
-          ),
-          ElevatedButton(
-            style: ElevatedButton.styleFrom(
-              backgroundColor: AppTheme.accentAmber,
-              foregroundColor: Colors.black,
-            ),
-            onPressed: () {
-              final code = codeCtrl.text.trim();
-              if (code.isNotEmpty) {
-                setState(() => _searchQuery = code);
-                Navigator.of(dlgCtx).pop();
-                ScaffoldMessenger.of(context).showSnackBar(
-                  SnackBar(content: Text(isAr ? 'تم تصفية الطلبيات برقم الكود 🔍' : 'Filtered by Order ID 🔍')),
-                );
-              }
-            },
-            child: Text(isAr ? 'بحث' : 'Search'),
-          ),
-        ],
-      ),
+    final MobileScannerController scannerController = MobileScannerController(
+      detectionSpeed: DetectionSpeed.noDuplicates,
+      facing: CameraFacing.back,
+      torchEnabled: false,
     );
+    bool _scanned = false;
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (sheetCtx) {
+        return Container(
+          height: MediaQuery.of(context).size.height * 0.75,
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceDark,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: AppTheme.borderSubtle),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Container(
+                margin: const EdgeInsets.only(top: 12),
+                width: 40,
+                height: 4,
+                decoration: BoxDecoration(
+                  color: AppTheme.borderSubtle,
+                  borderRadius: BorderRadius.circular(2),
+                ),
+              ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.fromLTRB(20, 16, 20, 12),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(
+                        Icons.qr_code_scanner_rounded,
+                        color: AppTheme.accentAmber,
+                        size: 22,
+                      ),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAr ? 'مسح رمز QR للطلبية' : 'Scan Order QR Code',
+                            style: const TextStyle(
+                              fontSize: 16,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          Text(
+                            isAr
+                                ? 'وجّه الكاميرا نحو رمز QR للطلبية'
+                                : 'Point the camera at the order QR code',
+                            style: TextStyle(
+                              fontSize: 12,
+                              color: AppTheme.textMuted,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: Icon(Icons.close_rounded, color: AppTheme.textMuted),
+                      onPressed: () {
+                        scannerController.dispose();
+                        Navigator.of(sheetCtx).pop();
+                      },
+                    ),
+                  ],
+                ),
+              ),
+              // Camera view
+              Expanded(
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 20),
+                  child: ClipRRect(
+                    borderRadius: BorderRadius.circular(20),
+                    child: Stack(
+                      alignment: Alignment.center,
+                      children: [
+                        // Camera feed
+                        MobileScanner(
+                          controller: scannerController,
+                          onDetect: (capture) async {
+                            if (_scanned) return;
+                            final barcode = capture.barcodes.firstOrNull;
+                            final rawValue = barcode?.rawValue;
+                            if (rawValue != null && rawValue.isNotEmpty) {
+                              _scanned = true;
+                              scannerController.dispose();
+                              Navigator.of(sheetCtx).pop();
+
+                              final cleanCode = rawValue.trim();
+                              setState(() => _searchQuery = cleanCode);
+
+                              ScaffoldMessenger.of(context).showSnackBar(
+                                SnackBar(
+                                  content: Row(
+                                    children: [
+                                      const SizedBox(
+                                        width: 16,
+                                        height: 16,
+                                        child: CircularProgressIndicator(
+                                          strokeWidth: 2,
+                                          color: Colors.black,
+                                        ),
+                                      ),
+                                      const SizedBox(width: 10),
+                                      Expanded(
+                                        child: Text(
+                                          isAr
+                                              ? 'جاري جلب الفاتورة وتوليد صورة الطلبية... 🖼️'
+                                              : 'Fetching order & generating image... 🖼️',
+                                          style: const TextStyle(fontWeight: FontWeight.bold),
+                                        ),
+                                      ),
+                                    ],
+                                  ),
+                                  backgroundColor: AppTheme.accentAmber,
+                                  duration: const Duration(seconds: 2),
+                                  behavior: SnackBarBehavior.floating,
+                                  shape: RoundedRectangleBorder(
+                                      borderRadius: BorderRadius.circular(12)),
+                                  margin: const EdgeInsets.all(16),
+                                ),
+                              );
+
+                              // Fetch order by ID & automatically save receipt image to phone gallery
+                              final scannedOrder = await FirestoreService().getOrderById(cleanCode);
+                              if (scannedOrder != null && context.mounted) {
+                                OrderShareHelper.saveOrderImageDirectlyToGallery(context, scannedOrder);
+                              } else if (context.mounted) {
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(
+                                      isAr
+                                          ? 'تم تصفية الطلبيات برقم الكود: $cleanCode 🔍'
+                                          : 'Filtered by QR Code: $cleanCode 🔍',
+                                    ),
+                                    backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.9),
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(
+                                        borderRadius: BorderRadius.circular(12)),
+                                    margin: const EdgeInsets.all(16),
+                                  ),
+                                );
+                              }
+                            }
+                          },
+                        ),
+                        // Scan frame overlay
+                        IgnorePointer(
+                          child: CustomPaint(
+                            painter: _QRScanFramePainter(
+                                color: AppTheme.accentAmber),
+                            child: const SizedBox(
+                              width: 220,
+                              height: 220,
+                            ),
+                          ),
+                        ),
+                      ],
+                    ),
+                  ),
+                ),
+              ),
+              // Torch toggle
+              Padding(
+                padding: const EdgeInsets.symmetric(vertical: 16),
+                child: StatefulBuilder(
+                  builder: (ctx, setBtn) {
+                    bool torchOn = false;
+                    return TextButton.icon(
+                      onPressed: () async {
+                        await scannerController.toggleTorch();
+                        setBtn(() => torchOn = !torchOn);
+                      },
+                      icon: Icon(
+                        torchOn
+                            ? Icons.flashlight_on_rounded
+                            : Icons.flashlight_off_rounded,
+                        color: torchOn
+                            ? AppTheme.accentAmber
+                            : AppTheme.textMuted,
+                      ),
+                      label: Text(
+                        isAr ? 'تشغيل/إيقاف الفلاش' : 'Toggle Flash',
+                        style: TextStyle(
+                          color: torchOn
+                              ? AppTheme.accentAmber
+                              : AppTheme.textMuted,
+                        ),
+                      ),
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    ).whenComplete(() {
+      // Safely dispose controller when sheet is dismissed by any means
+      try {
+        scannerController.dispose();
+      } catch (_) {}
+    });
   }
 
   Future<void> _markDone(Order order) async {
@@ -626,4 +788,51 @@ class _OrdersScreenState extends State<OrdersScreen> {
       ),
     );
   }
+}
+
+/// Custom painter that draws QR scan corner brackets
+class _QRScanFramePainter extends CustomPainter {
+  final Color color;
+  _QRScanFramePainter({required this.color});
+
+  @override
+  void paint(Canvas canvas, Size size) {
+    final paint = Paint()
+      ..color = color
+      ..strokeWidth = 3.5
+      ..style = PaintingStyle.stroke
+      ..strokeCap = StrokeCap.round;
+
+    const double cornerLen = 30.0;
+    const double r = 8.0;
+    final w = size.width;
+    final h = size.height;
+
+    // Top-left
+    canvas.drawLine(Offset(r, 0), Offset(cornerLen, 0), paint);
+    canvas.drawLine(Offset(0, r), Offset(0, cornerLen), paint);
+    canvas.drawArc(
+        Rect.fromLTWH(0, 0, r * 2, r * 2), 3.14159, -1.5708, false, paint);
+
+    // Top-right
+    canvas.drawLine(Offset(w - cornerLen, 0), Offset(w - r, 0), paint);
+    canvas.drawLine(Offset(w, r), Offset(w, cornerLen), paint);
+    canvas.drawArc(
+        Rect.fromLTWH(w - r * 2, 0, r * 2, r * 2), 1.5708, -1.5708, false, paint);
+
+    // Bottom-left
+    canvas.drawLine(Offset(0, h - cornerLen), Offset(0, h - r), paint);
+    canvas.drawLine(Offset(r, h), Offset(cornerLen, h), paint);
+    canvas.drawArc(
+        Rect.fromLTWH(0, h - r * 2, r * 2, r * 2), 1.5708, 1.5708, false, paint);
+
+    // Bottom-right
+    canvas.drawLine(Offset(w, h - cornerLen), Offset(w, h - r), paint);
+    canvas.drawLine(Offset(w - cornerLen, h), Offset(w - r, h), paint);
+    canvas.drawArc(
+        Rect.fromLTWH(w - r * 2, h - r * 2, r * 2, r * 2), 0, 1.5708, false, paint);
+  }
+
+  @override
+  bool shouldRepaint(covariant CustomPainter oldDelegate) => false;
 }

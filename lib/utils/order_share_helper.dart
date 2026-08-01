@@ -6,9 +6,11 @@ import 'package:flutter/rendering.dart';
 import 'package:flutter/services.dart';
 import 'package:intl/intl.dart';
 import 'package:share_plus/share_plus.dart';
+import 'package:gal/gal.dart';
 import '../models/order_model.dart';
 import '../theme/app_theme.dart';
 import '../providers/language_provider.dart';
+import 'pdf_invoice_generator.dart';
 
 class OrderShareHelper {
   // ─── Main Share Options Dialog ──────────────────────────────────────────
@@ -77,7 +79,7 @@ class OrderShareHelper {
               ),
               onTap: () {
                 Navigator.of(bottomCtx).pop();
-                _shareOrderAsImage(context, order);
+                shareOrderAsImage(context, order);
               },
             ),
             const Divider(),
@@ -136,122 +138,209 @@ class OrderShareHelper {
     );
   }
 
-  // ─── 1. Share Order as Image ─────────────────────────────────────────────
-  static Future<void> _shareOrderAsImage(BuildContext context, Order order) async {
+  // ─── Direct Save Image to Device Gallery ────────────────────────────────
+  static Future<void> saveOrderImageDirectlyToGallery(BuildContext context, Order order) async {
     final isAr = context.tr('tab_orders') == 'الطلبيات';
     final repaintKey = GlobalKey();
 
     showDialog(
       context: context,
-      builder: (dlgCtx) => Dialog(
-        backgroundColor: Colors.transparent,
-        child: SingleChildScrollView(
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              RepaintBoundary(
-                key: repaintKey,
-                child: _buildPrintableReceiptCard(context, order),
-              ),
-              const SizedBox(height: 16),
-              ElevatedButton.icon(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: AppTheme.accentAmber,
-                  foregroundColor: Colors.black,
-                  padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
-                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                ),
-                icon: const Icon(Icons.share_rounded),
-                label: Text(
-                  isAr ? 'مشاركة الصورة الآن' : 'Share Image Now',
-                  style: const TextStyle(fontWeight: FontWeight.bold),
-                ),
-                onPressed: () async {
-                  try {
-                    final boundary = repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
-                    if (boundary == null) return;
-                    final image = await boundary.toImage(pixelRatio: 3.0);
-                    final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
-                    if (byteData == null) return;
-                    final pngBytes = byteData.buffer.asUint8List();
+      barrierDismissible: false,
+      builder: (dlgCtx) {
+        Future.delayed(const Duration(milliseconds: 350), () async {
+          try {
+            final boundary = repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+            if (boundary != null) {
+              final image = await boundary.toImage(pixelRatio: 3.0);
+              final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+              if (byteData != null) {
+                final pngBytes = byteData.buffer.asUint8List();
+                final shortId = order.id.length > 6 ? order.id.substring(0, 6) : order.id;
 
-                    final tempDir = Directory.systemTemp;
-                    final file = File('${tempDir.path}/Order_${order.id.substring(0, 6)}.png');
-                    await file.writeAsBytes(pngBytes);
+                // Save directly to phone's Photo Gallery using Gal
+                await Gal.putImageBytes(
+                  pngBytes,
+                  name: 'TUSSI_Order_$shortId',
+                );
 
-                    if (context.mounted) {
-                      Navigator.of(dlgCtx).pop();
-                    }
+                if (dlgCtx.mounted) {
+                  Navigator.of(dlgCtx).pop();
+                }
 
-                    await Share.shareXFiles(
-                      [XFile(file.path)],
-                      text: isAr ? 'تفاصيل طلبية TUSSI #${order.id.substring(0, 6)}' : 'TUSSI Order #${order.id.substring(0, 6)}',
-                    );
-                  } catch (e) {
-                    if (context.mounted) {
-                      ScaffoldMessenger.of(context).showSnackBar(
-                        SnackBar(content: Text('Error sharing image: $e')),
-                      );
-                    }
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          const Icon(Icons.check_circle_rounded, color: Colors.white, size: 20),
+                          const SizedBox(width: 10),
+                          Expanded(
+                            child: Text(
+                              isAr
+                                  ? 'تم حفظ صورة الطلبية بنجاح في معرض الصور (Gallery) 🖼️'
+                                  : 'Order receipt saved to Photo Gallery! 🖼️',
+                              style: const TextStyle(fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ],
+                      ),
+                      backgroundColor: Colors.green.shade700,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      margin: const EdgeInsets.all(16),
+                      duration: const Duration(seconds: 4),
+                    ),
+                  );
+                }
+                return;
+              }
+            }
+          } catch (e) {
+            print('Gal Direct Save Exception: $e');
+            // Fallback: write file to external storage Pictures
+            try {
+              final boundary = repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+              if (boundary != null) {
+                final image = await boundary.toImage(pixelRatio: 3.0);
+                final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+                if (byteData != null) {
+                  final pngBytes = byteData.buffer.asUint8List();
+                  final picDir = Directory('/storage/emulated/0/Pictures');
+                  if (await picDir.exists()) {
+                    final shortId = order.id.length > 6 ? order.id.substring(0, 6) : order.id;
+                    final f = File('${picDir.path}/TUSSI_Order_$shortId.png');
+                    await f.writeAsBytes(pngBytes);
                   }
-                },
-              ),
-            ],
+                }
+              }
+            } catch (_) {}
+          }
+
+          if (dlgCtx.mounted) {
+            Navigator.of(dlgCtx).pop();
+          }
+        });
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          elevation: 0,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RepaintBoundary(
+                  key: repaintKey,
+                  child: _buildPrintableReceiptCard(context, order),
+                ),
+              ],
+            ),
           ),
-        ),
-      ),
+        );
+      },
+    );
+  }
+
+  // ─── 1. Share Order as Image ─────────────────────────────────────────────
+  static Future<void> shareOrderAsImage(BuildContext context, Order order, {bool autoTrigger = false}) async {
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+    final repaintKey = GlobalKey();
+
+    Future<void> _captureAndShare(BuildContext dlgCtx) async {
+      try {
+        final boundary = repaintKey.currentContext?.findRenderObject() as RenderRepaintBoundary?;
+        if (boundary == null) return;
+        final image = await boundary.toImage(pixelRatio: 3.0);
+        final byteData = await image.toByteData(format: ui.ImageByteFormat.png);
+        if (byteData == null) return;
+        final pngBytes = byteData.buffer.asUint8List();
+
+        final tempDir = Directory.systemTemp;
+        final file = File('${tempDir.path}/Order_${order.id.length > 6 ? order.id.substring(0, 6) : order.id}.png');
+        await file.writeAsBytes(pngBytes);
+
+        if (context.mounted) {
+          Navigator.of(dlgCtx).pop();
+        }
+
+        await Share.shareXFiles(
+          [XFile(file.path)],
+          text: isAr
+              ? 'تفاصيل طلبية TUSSI #${order.id.length > 6 ? order.id.substring(0, 6) : order.id}'
+              : 'TUSSI Order #${order.id.length > 6 ? order.id.substring(0, 6) : order.id}',
+        );
+      } catch (e) {
+        if (context.mounted) {
+          ScaffoldMessenger.of(context).showSnackBar(
+            SnackBar(content: Text('Error sharing image: $e')),
+          );
+        }
+      }
+    }
+
+    showDialog(
+      context: context,
+      builder: (dlgCtx) {
+        if (autoTrigger) {
+          Future.delayed(const Duration(milliseconds: 400), () {
+            if (dlgCtx.mounted) {
+              _captureAndShare(dlgCtx);
+            }
+          });
+        }
+
+        return Dialog(
+          backgroundColor: Colors.transparent,
+          child: SingleChildScrollView(
+            child: Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                RepaintBoundary(
+                  key: repaintKey,
+                  child: _buildPrintableReceiptCard(context, order),
+                ),
+                const SizedBox(height: 16),
+                ElevatedButton.icon(
+                  style: ElevatedButton.styleFrom(
+                    backgroundColor: AppTheme.accentAmber,
+                    foregroundColor: Colors.black,
+                    padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
+                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                  ),
+                  icon: const Icon(Icons.share_rounded),
+                  label: Text(
+                    isAr ? 'حفظ / مشاركة الصورة' : 'Save / Share Image',
+                    style: const TextStyle(fontWeight: FontWeight.bold),
+                  ),
+                  onPressed: () => _captureAndShare(dlgCtx),
+                ),
+              ],
+            ),
+          ),
+        );
+      },
     );
   }
 
   // ─── 2. Share Order as Document / PDF ───────────────────────────────────
   static Future<void> _shareOrderAsDocument(BuildContext context, Order order) async {
     final isAr = context.tr('tab_orders') == 'الطلبيات';
-    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
-    final formattedPrice = NumberFormat('#,##0.##', 'en_US').format(order.computedTotal);
-    final paidPrice = NumberFormat('#,##0.##', 'en_US').format(order.paidAmount ?? 0);
-    final balancePrice = NumberFormat('#,##0.##', 'en_US').format(order.balanceDue);
+    final shortId = order.id.length > 8 ? order.id.substring(0, 8) : order.id;
 
-    StringBuffer sb = StringBuffer();
-    sb.writeln('========================================');
-    sb.writeln('          TUSSI FABRIC SYSTEM           ');
-    sb.writeln('            فاتورة طلبية أقمشة          ');
-    sb.writeln('========================================');
-    sb.writeln('رقم الطلب (Order ID): #${order.id}');
-    sb.writeln('التاريخ (Date): ${dateFormat.format(order.createdAt)}');
-    sb.writeln('المرسل (From): ${order.senderName}');
-    sb.writeln('المستلم (To): ${order.receiverName}');
-    if (order.customerName != null && order.customerName!.isNotEmpty) {
-      sb.writeln('الزبون (Customer): ${order.customerName}');
+    try {
+      final file = await PdfInvoiceGenerator.generateOrderPdf(order);
+
+      await Share.shareXFiles(
+        [XFile(file.path)],
+        text: isAr ? 'مستند فاتورة طلبية TUSSI #$shortId.pdf' : 'TUSSI Order Invoice #$shortId.pdf',
+      );
+    } catch (e) {
+      print('PDF Share Error: $e');
+      if (context.mounted) {
+        ScaffoldMessenger.of(context).showSnackBar(
+          SnackBar(content: Text('Error generating PDF: $e')),
+        );
+      }
     }
-    sb.writeln('----------------------------------------');
-    sb.writeln('الأقمشة المطلوبة (Fabrics List):');
-
-    for (var i = 0; i < order.fabrics.length; i++) {
-      final f = order.fabrics[i];
-      final qty = f.sequence.fold(0.0, (s, v) => s + v);
-      sb.writeln('${i + 1}. ${f.fabricType}');
-      sb.writeln('   عدد الأسطوانات: ${f.sequence.length} | الكمية: $qty ${f.unit}');
-      sb.writeln('   الأطوال التفصيلية: [${f.sequence.join(', ')}]');
-      sb.writeln('   السعر: ${NumberFormat('#,##0.##', 'en_US').format(qty * f.price)} د.ج');
-      sb.writeln('');
-    }
-
-    sb.writeln('----------------------------------------');
-    sb.writeln('إجمالي السعر (Total): $formattedPrice د.ج');
-    sb.writeln('المبلغ المدفوع (Paid): $paidPrice د.ج');
-    sb.writeln('المبلغ المتبقي (Balance): $balancePrice د.ج');
-    sb.writeln('حالة الدفع (Status): ${order.paymentStatus}');
-    sb.writeln('========================================');
-    sb.writeln('tussi.web.app - TUSSI App');
-
-    final tempDir = Directory.systemTemp;
-    final file = File('${tempDir.path}/Order_${order.id.substring(0, 6)}.txt');
-    await file.writeAsString(sb.toString(), encoding: utf8);
-
-    await Share.shareXFiles(
-      [XFile(file.path)],
-      text: isAr ? 'ملف فاتورة طلبية TUSSI' : 'TUSSI Order Document',
-    );
   }
 
   // ─── 3. Show Order QR Code Modal ─────────────────────────────────────────
@@ -370,98 +459,220 @@ class OrderShareHelper {
 
   // ─── Printable Receipt Layout Widget ────────────────────────────────────
   static Widget _buildPrintableReceiptCard(BuildContext context, Order order) {
-    final dateFormat = DateFormat('yyyy-MM-dd HH:mm');
-    final formattedPrice = NumberFormat('#,##0.##', 'en_US').format(order.computedTotal);
+    final dateFormat = DateFormat('yyyy/MM/dd   HH:mm');
+    final priceFormat = NumberFormat('#,##0.##', 'en_US');
+
+    // ── Grand totals ──
+    double grandTotal = 0.0;
+    int grandCylinders = 0;
+    double grandMeters = 0.0;
+
+    for (final f in order.fabrics) {
+      final qty = f.sequence.fold(0.0, (s, v) => s + v);
+      grandTotal += qty * f.price;
+      grandCylinders += f.sequence.length;
+      if (f.unit != 'kg') grandMeters += qty;
+    }
+
+    const Color _bg       = Color(0xFF16161F);
+    const Color _card     = Color(0xFF1E1E2C);
+    const Color _divider  = Color(0xFF2E2E3E);
+    const Color _gold     = Color(0xFFF5C842);
+    const Color _white    = Colors.white;
+    final     _muted      = Colors.grey.shade400;
+
+    Widget _row(String label, String value, {Color? valueColor, double fontSize = 11}) =>
+      Padding(
+        padding: const EdgeInsets.symmetric(vertical: 3),
+        child: Row(
+          mainAxisAlignment: MainAxisAlignment.spaceBetween,
+          children: [
+            Text(label, style: TextStyle(color: _muted, fontSize: fontSize)),
+            Text(value, style: TextStyle(color: valueColor ?? _white, fontSize: fontSize, fontWeight: FontWeight.bold)),
+          ],
+        ),
+      );
+
+    Widget _dividerWidget() => Padding(
+      padding: const EdgeInsets.symmetric(vertical: 10),
+      child: Container(height: 1, color: _divider),
+    );
 
     return Container(
-      width: 320,
+      width: 340,
       padding: const EdgeInsets.all(20),
       decoration: BoxDecoration(
-        color: const Color(0xFF1E1E2C),
+        color: _bg,
         borderRadius: BorderRadius.circular(20),
-        border: Border.all(color: AppTheme.accentAmber, width: 2),
+        border: Border.all(color: _gold, width: 1.8),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
         children: [
+
+          // ── Header ──────────────────────────────────────
           Center(
             child: Column(
               children: [
-                Icon(Icons.storefront_rounded, color: AppTheme.accentAmber, size: 36),
-                const SizedBox(height: 4),
+                Container(
+                  padding: const EdgeInsets.all(10),
+                  decoration: BoxDecoration(
+                    color: _gold.withValues(alpha: 0.12),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.storefront_rounded, color: _gold, size: 32),
+                ),
+                const SizedBox(height: 8),
                 const Text(
                   'TUSSI SYSTEM',
-                  style: TextStyle(color: Colors.white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2),
+                  style: TextStyle(color: _white, fontSize: 18, fontWeight: FontWeight.w900, letterSpacing: 2.5),
                 ),
+                const SizedBox(height: 2),
                 Text(
                   'فاتورة طلبية أقمشة',
-                  style: TextStyle(color: AppTheme.accentAmber, fontSize: 12, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: _gold, fontSize: 12, fontWeight: FontWeight.bold),
                 ),
               ],
             ),
           ),
-          const SizedBox(height: 16),
-          const Divider(color: Colors.white24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('رقم الطلب:', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-              Text('#${order.id.substring(0, 8)}', style: const TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('التاريخ:', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-              Text(dateFormat.format(order.createdAt), style: const TextStyle(color: Colors.white, fontSize: 11)),
-            ],
-          ),
-          const SizedBox(height: 4),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              Text('من -> إلى:', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-              Text('${order.senderName} ➔ ${order.receiverName}', style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold)),
-            ],
-          ),
-          if (order.customerName != null && order.customerName!.isNotEmpty) ...[
-            const SizedBox(height: 4),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text('الزبون:', style: TextStyle(color: Colors.grey.shade400, fontSize: 11)),
-                Text(order.customerName!, style: TextStyle(color: AppTheme.accentAmber, fontSize: 12, fontWeight: FontWeight.bold)),
-              ],
-            ),
-          ],
-          const SizedBox(height: 12),
-          const Divider(color: Colors.white24),
-          const Text('تفاصيل الأقمشة:', style: TextStyle(color: Colors.white, fontSize: 12, fontWeight: FontWeight.bold)),
-          const SizedBox(height: 8),
 
-          ...order.fabrics.map((f) {
+          _dividerWidget(),
+
+          // ── Order Info ───────────────────────────────────
+          _row('رقم الطلب:', '#${order.id.length > 10 ? order.id.substring(0, 10) : order.id}'),
+          _row('التاريخ:', dateFormat.format(order.createdAt)),
+          _row('المرسل (المحل):', order.senderName, valueColor: _gold),
+          _row('المستلم:', order.receiverName),
+          if (order.customerName != null && order.customerName!.isNotEmpty)
+            _row('الزبون:', order.customerName!, valueColor: _gold, fontSize: 13),
+
+          _dividerWidget(),
+
+          // ── Fabrics count badge ──────────────────────────
+          Row(
+            children: [
+              const Icon(Icons.texture_rounded, color: _gold, size: 14),
+              const SizedBox(width: 6),
+              Text(
+                'الأقمشة (${order.fabrics.length} نوع)',
+                style: const TextStyle(color: _white, fontSize: 13, fontWeight: FontWeight.bold),
+              ),
+            ],
+          ),
+          const SizedBox(height: 10),
+
+          // ── Per-fabric details ───────────────────────────
+          ...order.fabrics.asMap().entries.map((entry) {
+            final idx = entry.key;
+            final f = entry.value;
             final qty = f.sequence.fold(0.0, (s, v) => s + v);
+            final fabricTotal = qty * f.price;
+            final unitText = f.unit == 'kg' ? 'كغ' : (f.unit == 'yard' ? 'يارد' : 'متر');
+
             return Padding(
-              padding: const EdgeInsets.symmetric(vertical: 4),
+              padding: const EdgeInsets.only(bottom: 8),
               child: Container(
-                padding: const EdgeInsets.all(8),
+                padding: const EdgeInsets.all(12),
                 decoration: BoxDecoration(
-                  color: Colors.white.withValues(alpha: 0.05),
-                  borderRadius: BorderRadius.circular(8),
+                  color: _card,
+                  borderRadius: BorderRadius.circular(12),
+                  border: Border.all(color: _divider),
                 ),
-                child: Row(
-                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                child: Column(
+                  crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
-                    Expanded(
-                      child: Text(
-                        f.fabricType,
-                        style: const TextStyle(color: Colors.white, fontSize: 11, fontWeight: FontWeight.bold),
-                      ),
+                    // Fabric name
+                    Row(
+                      children: [
+                        Container(
+                          width: 20,
+                          height: 20,
+                          decoration: BoxDecoration(
+                            color: _gold.withValues(alpha: 0.15),
+                            borderRadius: BorderRadius.circular(6),
+                          ),
+                          child: Center(
+                            child: Text(
+                              '${idx + 1}',
+                              style: const TextStyle(color: _gold, fontSize: 10, fontWeight: FontWeight.bold),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(width: 8),
+                        Expanded(
+                          child: Text(
+                            f.fabricType,
+                            style: const TextStyle(color: _white, fontSize: 12, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
                     ),
-                    Text(
-                      '${f.sequence.length} اسطوانة | $qty ${f.unit}',
-                      style: TextStyle(color: AppTheme.accentAmber, fontSize: 11, fontWeight: FontWeight.bold),
+                    const SizedBox(height: 10),
+                    // Stats row
+                    Row(
+                      children: [
+                        // Cylinders
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Text('الأسطوانات', style: TextStyle(color: _muted, fontSize: 9)),
+                              const SizedBox(height: 3),
+                              Text('${f.sequence.length}', style: const TextStyle(color: _white, fontSize: 13, fontWeight: FontWeight.bold)),
+                            ],
+                          ),
+                        ),
+                        Container(width: 1, height: 28, color: _divider),
+                        // Meters / qty
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Text('الكمية', style: TextStyle(color: _muted, fontSize: 9)),
+                              const SizedBox(height: 3),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  '${qty.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} $unitText',
+                                  style: const TextStyle(color: _white, fontSize: 13, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(width: 1, height: 28, color: _divider),
+                        // Unit price
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Text('السعر/$unitText', style: TextStyle(color: _muted, fontSize: 9)),
+                              const SizedBox(height: 3),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  '${priceFormat.format(f.price)} د.ج',
+                                  style: const TextStyle(color: _white, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                        Container(width: 1, height: 28, color: _divider),
+                        // Fabric total
+                        Expanded(
+                          child: Column(
+                            children: [
+                              Text('الإجمالي', style: TextStyle(color: _muted, fontSize: 9)),
+                              const SizedBox(height: 3),
+                              FittedBox(
+                                fit: BoxFit.scaleDown,
+                                child: Text(
+                                  '${priceFormat.format(fabricTotal)} د.ج',
+                                  style: const TextStyle(color: _gold, fontSize: 11, fontWeight: FontWeight.bold),
+                                ),
+                              ),
+                            ],
+                          ),
+                        ),
+                      ],
                     ),
                   ],
                 ),
@@ -469,14 +680,67 @@ class OrderShareHelper {
             );
           }),
 
-          const SizedBox(height: 12),
-          const Divider(color: Colors.white24),
-          Row(
-            mainAxisAlignment: MainAxisAlignment.spaceBetween,
-            children: [
-              const Text('إجمالي السعر:', style: TextStyle(color: Colors.white, fontSize: 14, fontWeight: FontWeight.bold)),
-              Text('$formattedPrice د.ج', style: TextStyle(color: AppTheme.accentAmber, fontSize: 16, fontWeight: FontWeight.w900)),
-            ],
+          _dividerWidget(),
+
+          // ── Grand summary ────────────────────────────────
+          Container(
+            padding: const EdgeInsets.all(14),
+            decoration: BoxDecoration(
+              color: _gold.withValues(alpha: 0.08),
+              borderRadius: BorderRadius.circular(12),
+              border: Border.all(color: _gold.withValues(alpha: 0.4)),
+            ),
+            child: Column(
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('إجمالي الأقمشة:', style: TextStyle(color: _muted, fontSize: 11)),
+                    Text('${order.fabrics.length} نوع', style: const TextStyle(color: _white, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    Text('إجمالي الأسطوانات:', style: TextStyle(color: _muted, fontSize: 11)),
+                    Text('$grandCylinders اسطوانة', style: const TextStyle(color: _white, fontSize: 11, fontWeight: FontWeight.bold)),
+                  ],
+                ),
+                const SizedBox(height: 4),
+                if (grandMeters > 0) ...[
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text('إجمالي المتر:', style: TextStyle(color: _muted, fontSize: 11)),
+                      Text('${grandMeters.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} م', style: const TextStyle(color: _white, fontSize: 11, fontWeight: FontWeight.bold)),
+                    ],
+                  ),
+                  const SizedBox(height: 8),
+                ],
+                Container(height: 1, color: _gold.withValues(alpha: 0.3)),
+                const SizedBox(height: 8),
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                  children: [
+                    const Text('إجمالي الطلبية:', style: TextStyle(color: _white, fontSize: 14, fontWeight: FontWeight.bold)),
+                    Text(
+                      '${priceFormat.format(grandTotal)} د.ج',
+                      style: const TextStyle(color: _gold, fontSize: 18, fontWeight: FontWeight.w900),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+
+          const SizedBox(height: 14),
+          // ── Footer ──────────────────────────────────────
+          Center(
+            child: Text(
+              'tussi.web.app • نظام توسي للأقمشة',
+              style: TextStyle(color: _muted, fontSize: 10),
+            ),
           ),
         ],
       ),

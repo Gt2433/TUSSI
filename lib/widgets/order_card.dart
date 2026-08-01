@@ -62,6 +62,7 @@ class OrderCard extends StatelessWidget {
           children: [
             // ─── Header ────────────────────────────────────────
             Row(
+              crossAxisAlignment: CrossAxisAlignment.start,
               children: [
                 Container(
                   padding: const EdgeInsets.all(10),
@@ -96,6 +97,8 @@ class OrderCard extends StatelessWidget {
                             : (isSent
                                 ? 'إلى (To): ${order.receiverName}'
                                 : 'من (From): ${order.senderName}'),
+                        overflow: TextOverflow.ellipsis,
+                        maxLines: 2,
                         style: TextStyle(
                           fontSize: 14,
                           fontWeight: FontWeight.bold,
@@ -110,6 +113,8 @@ class OrderCard extends StatelessWidget {
                           isSent
                               ? 'المستلم (Receiver): ${order.receiverName}'
                               : 'المرسل (Sender): ${order.senderName}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                           style: TextStyle(
                             fontSize: 12,
                             color: AppTheme.textSecondary,
@@ -120,6 +125,8 @@ class OrderCard extends StatelessWidget {
                         const SizedBox(height: 2),
                         Text(
                           'الزبون: ${order.customerName}',
+                          overflow: TextOverflow.ellipsis,
+                          maxLines: 1,
                           style: TextStyle(
                             fontSize: 14,
                             fontWeight: FontWeight.w700,
@@ -135,49 +142,70 @@ class OrderCard extends StatelessWidget {
                           color: AppTheme.textMuted,
                         ),
                       ),
+                      // ── Status badge + action buttons (history mode) ──
+                      if (showStatus) ...[
+                        const SizedBox(height: 8),
+                        Row(
+                          children: [
+                            _StatusBadge(status: order.status),
+                            const Spacer(),
+                            // Share button
+                            IconButton(
+                              icon: Icon(Icons.share_rounded, color: AppTheme.accentAmber, size: 18),
+                              tooltip: 'مشاركة / تصدير',
+                              onPressed: () => OrderShareHelper.showShareModal(context, order),
+                              style: IconButton.styleFrom(
+                                backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.1),
+                                padding: const EdgeInsets.all(4),
+                                minimumSize: const Size(32, 32),
+                              ),
+                            ),
+                            if (onRestore != null) ...[
+                              const SizedBox(width: 6),
+                              IconButton(
+                                icon: Icon(Icons.restore_rounded, color: AppTheme.accentAmber, size: 18),
+                                tooltip: 'إعادة فتح الطلب',
+                                onPressed: onRestore,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: AppTheme.surfaceElevated,
+                                  padding: const EdgeInsets.all(4),
+                                  minimumSize: const Size(32, 32),
+                                ),
+                              ),
+                            ],
+                            if (onDelete != null) ...[
+                              const SizedBox(width: 6),
+                              IconButton(
+                                icon: Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 18),
+                                tooltip: 'حذف الطلب نهائياً',
+                                onPressed: onDelete,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: AppTheme.errorSurface,
+                                  padding: const EdgeInsets.all(4),
+                                  minimumSize: const Size(32, 32),
+                                ),
+                              ),
+                            ],
+                          ],
+                        ),
+                      ],
                     ],
                   ),
                 ),
-                // Share / Export Button
-                IconButton(
-                  icon: Icon(Icons.share_rounded, color: AppTheme.accentAmber, size: 20),
-                  tooltip: 'مشاركة / تصدير (Share / Export)',
-                  onPressed: () => OrderShareHelper.showShareModal(context, order),
-                  style: IconButton.styleFrom(
-                    backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.1),
-                    padding: const EdgeInsets.all(4),
-                  ),
-                ),
-                if (showStatus) ...[
-                  const SizedBox(width: 8),
-                  _StatusBadge(status: order.status),
-                ],
-                if (showStatus && onRestore != null) ...[
-                  const SizedBox(width: 8),
+                // Share button (non-history mode only)
+                if (!showStatus)
                   IconButton(
-                    icon: Icon(Icons.restore_rounded, color: AppTheme.accentAmber, size: 20),
-                    tooltip: 'إعادة فتح الطلب (Restore)',
-                    onPressed: onRestore,
+                    icon: Icon(Icons.share_rounded, color: AppTheme.accentAmber, size: 20),
+                    tooltip: 'مشاركة / تصدير (Share / Export)',
+                    onPressed: () => OrderShareHelper.showShareModal(context, order),
                     style: IconButton.styleFrom(
-                      backgroundColor: AppTheme.surfaceElevated,
+                      backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.1),
                       padding: const EdgeInsets.all(4),
                     ),
                   ),
-                ],
-                if (showStatus && onDelete != null) ...[
-                  const SizedBox(width: 8),
-                  IconButton(
-                    icon: Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
-                    tooltip: 'حذف الطلب نهائياً',
-                    onPressed: onDelete,
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppTheme.errorSurface,
-                      padding: const EdgeInsets.all(4),
-                    ),
-                  ),
-                ],
               ],
             ),
+
 
             if (isQuickOrder) ...[
               const SizedBox(height: 16),
