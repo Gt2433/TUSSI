@@ -233,11 +233,145 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
   final TextEditingController _lengthController = TextEditingController();
   final TextEditingController _priceController = TextEditingController();
   final FirestoreService _firestoreService = FirestoreService();
+  final Set<int> _selectedSubtotalIndices = {};
 
   Stream<List<FabricType>>? _fabricTypesStream;
   Stream<List<double>>? _savedLengthsStream;
   String? _lastFabricType;
   String? _shopId;
+
+  Widget _buildTopSubtotalBanner(BuildContext context, FabricEntry entry) {
+    if (_selectedSubtotalIndices.isEmpty) return const SizedBox.shrink();
+
+    double subtotalQty = 0.0;
+    final List<double> selectedValues = [];
+    for (final idx in _selectedSubtotalIndices) {
+      if (idx >= 0 && idx < entry.sequence.length) {
+        final val = entry.sequence[idx];
+        subtotalQty += val;
+        selectedValues.add(val);
+      }
+    }
+    final subtotalPrice = subtotalQty * entry.price;
+    final isAr = Localizations.localeOf(context).languageCode == 'ar';
+
+    return Container(
+      margin: const EdgeInsets.only(bottom: 16),
+      padding: const EdgeInsets.all(12),
+      decoration: BoxDecoration(
+        gradient: LinearGradient(
+          colors: [
+            AppTheme.accentAmber.withValues(alpha: 0.25),
+            AppTheme.surfaceCard,
+          ],
+          begin: Alignment.topRight,
+          end: Alignment.bottomLeft,
+        ),
+        borderRadius: BorderRadius.circular(14),
+        border: Border.all(color: AppTheme.accentAmber, width: 1.5),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withValues(alpha: 0.25),
+            blurRadius: 8,
+            offset: const Offset(0, 3),
+          ),
+        ],
+      ),
+      child: Column(
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Row(
+                children: [
+                  Icon(Icons.calculate_rounded, color: AppTheme.accentAmber, size: 18),
+                  const SizedBox(width: 6),
+                  Text(
+                    isAr ? 'المجموع الجزئي للأسطوانات المحددة 🧮' : 'Selected Rolls Subtotal 🧮',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accentAmber,
+                    ),
+                  ),
+                ],
+              ),
+              InkWell(
+                onTap: () {
+                  setState(() {
+                    _selectedSubtotalIndices.clear();
+                  });
+                },
+                borderRadius: BorderRadius.circular(20),
+                child: Container(
+                  padding: const EdgeInsets.all(4),
+                  decoration: BoxDecoration(
+                    color: Colors.white.withValues(alpha: 0.1),
+                    shape: BoxShape.circle,
+                  ),
+                  child: const Icon(Icons.close_rounded, size: 16, color: Colors.white),
+                ),
+              ),
+            ],
+          ),
+          const SizedBox(height: 8),
+          SingleChildScrollView(
+            scrollDirection: Axis.horizontal,
+            child: Row(
+              children: selectedValues.map((val) {
+                final displayVal = val == val.roundToDouble() ? val.toInt().toString() : val.toString();
+                return Container(
+                  margin: const EdgeInsets.only(left: 6),
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentAmber,
+                    borderRadius: BorderRadius.circular(6),
+                  ),
+                  child: Text(
+                    '$displayVal ${entry.unit}',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.surfaceDark,
+                    ),
+                  ),
+                );
+              }).toList(),
+            ),
+          ),
+          const SizedBox(height: 10),
+          Row(
+            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+            children: [
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Text(isAr ? 'العدد المحدد:' : 'Count:', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                  Text('${_selectedSubtotalIndices.length} ${isAr ? "أسطوانة" : "rolls"}', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: AppTheme.textPrimary)),
+                ],
+              ),
+              Column(
+                crossAxisAlignment: CrossAxisAlignment.center,
+                children: [
+                  Text(isAr ? 'إجمالي الأمتار:' : 'Total Length:', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                  Text('${subtotalQty.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} ${entry.unit}', style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.accentAmberLight)),
+                ],
+              ),
+              if (entry.price > 0)
+                Column(
+                  crossAxisAlignment: CrossAxisAlignment.end,
+                  children: [
+                    Text(isAr ? 'إجمالي السعر:' : 'Total Price:', style: TextStyle(fontSize: 10, color: AppTheme.textMuted)),
+                    Text('${subtotalPrice.toStringAsFixed(2).replaceAll(RegExp(r'\.00$'), '')} ${isAr ? "د.ل" : "DA"}', style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: Colors.greenAccent)),
+                  ],
+                ),
+            ],
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   void initState() {
@@ -584,6 +718,7 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                   ],
                 ),
                 const Divider(height: 24),
+                _buildTopSubtotalBanner(context, entry),
 
                 // Fabric Type Selector
                 Column(
@@ -882,43 +1017,79 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                                   : e.key;
                               final displayLengthText = lengthText;
 
-                              return Container(
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                decoration: BoxDecoration(
-                                  color: AppTheme.surfaceElevated,
-                                  borderRadius: BorderRadius.circular(8),
-                                  border: Border.all(color: AppTheme.borderSubtle),
-                                ),
-                                child: Row(
-                                  mainAxisSize: MainAxisSize.min,
-                                  children: [
-                                    Text(
-                                      displayLengthText,
-                                      style: TextStyle(
-                                        fontSize: 18,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.textPrimary,
-                                      ),
+                              final lenVal = double.tryParse(e.key) ?? 0.0;
+                              final seqIndices = <int>[];
+                              for (int i = 0; i < entry.sequence.length; i++) {
+                                if ((entry.sequence[i] - lenVal).abs() < 0.01) {
+                                  seqIndices.add(i);
+                                }
+                              }
+                              final isAllSelected = seqIndices.isNotEmpty && seqIndices.every((i) => _selectedSubtotalIndices.contains(i));
+                              final isAnySelected = seqIndices.any((i) => _selectedSubtotalIndices.contains(i));
+
+                              return InkWell(
+                                onTap: () {
+                                  setState(() {
+                                    if (isAllSelected) {
+                                      _selectedSubtotalIndices.removeAll(seqIndices);
+                                    } else {
+                                      _selectedSubtotalIndices.addAll(seqIndices);
+                                    }
+                                  });
+                                },
+                                borderRadius: BorderRadius.circular(8),
+                                child: AnimatedContainer(
+                                  duration: const Duration(milliseconds: 150),
+                                  padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                  decoration: BoxDecoration(
+                                    color: isAllSelected
+                                        ? AppTheme.accentAmber
+                                        : (isAnySelected
+                                            ? AppTheme.accentAmber.withValues(alpha: 0.25)
+                                            : AppTheme.surfaceElevated),
+                                    borderRadius: BorderRadius.circular(8),
+                                    border: Border.all(
+                                      color: isAnySelected ? AppTheme.accentAmber : AppTheme.borderSubtle,
+                                      width: isAnySelected ? 1.5 : 1.0,
                                     ),
-                                    if (e.value > 1) ...[
-                                      const SizedBox(width: 6),
-                                      Container(
-                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
-                                        decoration: BoxDecoration(
-                                          color: AppTheme.accentAmber,
-                                          borderRadius: BorderRadius.circular(6),
+                                  ),
+                                  child: Row(
+                                    mainAxisSize: MainAxisSize.min,
+                                    children: [
+                                      if (isAllSelected) ...[
+                                        Icon(Icons.check_circle_rounded, size: 16, color: AppTheme.surfaceDark),
+                                        const SizedBox(width: 4),
+                                      ],
+                                      Text(
+                                        displayLengthText,
+                                        style: TextStyle(
+                                          fontSize: 18,
+                                          fontWeight: FontWeight.bold,
+                                          color: isAllSelected ? AppTheme.surfaceDark : AppTheme.textPrimary,
                                         ),
-                                        child: Text(
-                                          '×${e.value}',
-                                          style: TextStyle(
-                                            fontSize: 15,
-                                            fontWeight: FontWeight.w900,
-                                            color: AppTheme.surfaceDark,
+                                      ),
+                                      if (e.value > 1) ...[
+                                        const SizedBox(width: 6),
+                                        Container(
+                                          padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                          decoration: BoxDecoration(
+                                            color: isAllSelected
+                                                ? AppTheme.surfaceDark.withValues(alpha: 0.2)
+                                                : AppTheme.accentAmber,
+                                            borderRadius: BorderRadius.circular(6),
+                                          ),
+                                          child: Text(
+                                            '×${e.value}',
+                                            style: TextStyle(
+                                              fontSize: 15,
+                                              fontWeight: FontWeight.w900,
+                                              color: AppTheme.surfaceDark,
+                                            ),
                                           ),
                                         ),
-                                      ),
+                                      ],
                                     ],
-                                  ],
+                                  ),
                                 ),
                               );
                             }).toList(),
@@ -1104,11 +1275,11 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                 if (entry.sequence.isNotEmpty) ...[
                   const SizedBox(height: 20),
                   Text(
-                    context.tr('input_sequence'),
+                    context.tr('input_sequence') + ' (انقر على الأمتار لحسابها 🧮):',
                     style: TextStyle(
                       fontSize: 12,
-                      fontWeight: FontWeight.w600,
-                      color: AppTheme.textSecondary,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accentAmber,
                     ),
                   ),
                   const SizedBox(height: 8),
@@ -1120,62 +1291,93 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                       itemBuilder: (context, idx) {
                         final val = entry.sequence[idx];
                         final isLast = idx == entry.sequence.length - 1;
+                        final isSelected = _selectedSubtotalIndices.contains(idx);
                         final displayLength = val == val.roundToDouble() ? val.toInt().toString() : val.toString();
 
                         return Row(
                           mainAxisSize: MainAxisSize.min,
                           children: [
-                            Container(
-                              padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
-                              decoration: BoxDecoration(
-                                color: isLast
-                                    ? AppTheme.accentAmber
-                                    : AppTheme.surfaceElevated,
-                                borderRadius: BorderRadius.circular(8),
-                                border: Border.all(
-                                  color: isLast
+                            InkWell(
+                              onTap: () {
+                                setState(() {
+                                  if (isSelected) {
+                                    _selectedSubtotalIndices.remove(idx);
+                                  } else {
+                                    _selectedSubtotalIndices.add(idx);
+                                  }
+                                });
+                              },
+                              borderRadius: BorderRadius.circular(8),
+                              child: AnimatedContainer(
+                                duration: const Duration(milliseconds: 150),
+                                padding: const EdgeInsets.symmetric(horizontal: 10, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: isSelected
                                       ? AppTheme.accentAmber
-                                      : AppTheme.borderSubtle,
-                                  width: isLast ? 1.5 : 1.0,
+                                      : (isLast ? AppTheme.accentAmber.withValues(alpha: 0.3) : AppTheme.surfaceElevated),
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(
+                                    color: isSelected
+                                        ? AppTheme.accentAmber
+                                        : (isLast ? AppTheme.accentAmber : AppTheme.borderSubtle),
+                                    width: isSelected || isLast ? 1.5 : 1.0,
+                                  ),
+                                  boxShadow: isSelected
+                                      ? [
+                                          BoxShadow(
+                                            color: AppTheme.accentAmber.withValues(alpha: 0.4),
+                                            blurRadius: 6,
+                                            offset: const Offset(0, 2),
+                                          )
+                                        ]
+                                      : null,
                                 ),
-                              ),
-                              child: Row(
-                                children: [
-                                  Text(
-                                    '#${idx + 1}: ',
-                                    style: TextStyle(
-                                      fontSize: 11,
-                                      fontWeight: FontWeight.bold,
-                                      color: isLast ? AppTheme.surfaceDark : AppTheme.textMuted,
-                                    ),
-                                  ),
-                                  Text(
-                                    displayLength,
-                                    style: TextStyle(
-                                      fontSize: 13,
-                                      fontWeight: FontWeight.w600,
-                                      color: isLast ? AppTheme.surfaceDark : AppTheme.textPrimary,
-                                    ),
-                                  ),
-                                  if (isLast) ...[
-                                    const SizedBox(width: 4),
-                                    Container(
-                                      padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
-                                      decoration: BoxDecoration(
-                                        color: AppTheme.surfaceDark.withValues(alpha: 0.15),
-                                        borderRadius: BorderRadius.circular(4),
+                                child: Row(
+                                  children: [
+                                    if (isSelected) ...[
+                                      Icon(Icons.check_rounded, size: 14, color: AppTheme.surfaceDark),
+                                      const SizedBox(width: 4),
+                                    ],
+                                    Text(
+                                      '#${idx + 1}: ',
+                                      style: TextStyle(
+                                        fontSize: 11,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected
+                                            ? AppTheme.surfaceDark
+                                            : (isLast ? AppTheme.accentAmber : AppTheme.textMuted),
                                       ),
-                                      child: Text(
-                                        context.tr('last_added'),
-                                        style: TextStyle(
-                                          fontSize: 8,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.surfaceDark,
+                                    ),
+                                    Text(
+                                      displayLength,
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: isSelected
+                                            ? AppTheme.surfaceDark
+                                            : (isLast ? AppTheme.accentAmber : AppTheme.textPrimary),
+                                      ),
+                                    ),
+                                    if (isLast && !isSelected) ...[
+                                      const SizedBox(width: 4),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 4, vertical: 1),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.accentAmber.withValues(alpha: 0.3),
+                                          borderRadius: BorderRadius.circular(4),
+                                        ),
+                                        child: Text(
+                                          context.tr('last_added'),
+                                          style: TextStyle(
+                                            fontSize: 8,
+                                            fontWeight: FontWeight.bold,
+                                            color: AppTheme.accentAmber,
+                                          ),
                                         ),
                                       ),
-                                    ),
+                                    ],
                                   ],
-                                ],
+                                ),
                               ),
                             ),
                             if (!isLast) ...[

@@ -502,11 +502,206 @@ function RegisterScreen({ onNavigate }) {
   );
 }
 
+// ===================== CALCULATOR MODAL =====================
+function CalculatorModal({ isOpen, onClose }) {
+  if (!isOpen) return null;
+  const [display, setDisplay] = useState('0');
+  const [expression, setExpression] = useState('');
+  const [firstOperand, setFirstOperand] = useState(null);
+  const [operator, setOperator] = useState(null);
+  const [waitingForSecond, setWaitingForSecond] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const formatNum = (num) => {
+    if (isNaN(num) || !isFinite(num)) return 'خطأ';
+    if (Number.isInteger(num)) return num.toString();
+    let s = num.toFixed(4);
+    while (s.includes('.') && (s.endsWith('0') || s.endsWith('.'))) {
+      s = s.slice(0, -1);
+    }
+    return s;
+  };
+
+  const handleDigit = (d) => {
+    if (waitingForSecond) {
+      setDisplay(d === '00' ? '0' : d);
+      setWaitingForSecond(false);
+    } else {
+      if (display === '0') {
+        if (d === '00') return;
+        setDisplay(d);
+      } else {
+        if (display.length < 15) setDisplay(display + d);
+      }
+    }
+  };
+
+  const handleDecimal = () => {
+    if (waitingForSecond) {
+      setDisplay('0.');
+      setWaitingForSecond(false);
+    } else if (!display.includes('.')) {
+      setDisplay(display + '.');
+    }
+  };
+
+  const handleToggleSign = () => {
+    if (display === '0' || display === 'خطأ') return;
+    setDisplay(display.startsWith('-') ? display.slice(1) : '-' + display);
+  };
+
+  const handleClear = () => setDisplay('0');
+  const handleAllClear = () => {
+    setDisplay('0');
+    setExpression('');
+    setFirstOperand(null);
+    setOperator(null);
+    setWaitingForSecond(false);
+  };
+
+  const handleBackspace = () => {
+    if (waitingForSecond || display === 'خطأ') {
+      setDisplay('0');
+      setWaitingForSecond(false);
+      return;
+    }
+    if (display.length > 1) {
+      const next = display.slice(0, -1);
+      setDisplay(next === '-' || !next ? '0' : next);
+    } else {
+      setDisplay('0');
+    }
+  };
+
+  const calculate = (op1, op2, op) => {
+    switch(op) {
+      case '+': return op1 + op2;
+      case '-': return op1 - op2;
+      case '×': return op1 * op2;
+      case '÷': return op2 !== 0 ? op1 / op2 : NaN;
+      default: return op2;
+    }
+  };
+
+  const handleOperator = (op) => {
+    const currentVal = parseFloat(display);
+    if (isNaN(currentVal)) return;
+
+    if (firstOperand === null) {
+      setFirstOperand(currentVal);
+    } else if (operator && !waitingForSecond) {
+      const res = calculate(firstOperand, currentVal, operator);
+      setDisplay(formatNum(res));
+      setFirstOperand(res);
+    }
+    setOperator(op);
+    setExpression(`${formatNum(firstOperand !== null && !waitingForSecond ? calculate(firstOperand, currentVal, operator) : (firstOperand ?? currentVal))} ${op}`);
+    setWaitingForSecond(true);
+  };
+
+  const handleEqual = () => {
+    if (firstOperand === null || !operator) return;
+    const secondOperand = parseFloat(display) || 0;
+    const res = calculate(firstOperand, secondOperand, operator);
+    const resStr = formatNum(res);
+    const exprStr = `${formatNum(firstOperand)} ${operator} ${formatNum(secondOperand)}`;
+
+    setHistory([{ expr: exprStr, result: resStr }, ...history]);
+    setExpression(`${exprStr} =`);
+    setDisplay(resStr);
+    setFirstOperand(isNaN(res) ? null : res);
+    setOperator(null);
+    setWaitingForSecond(true);
+  };
+
+  const copyResult = () => {
+    navigator.clipboard.writeText(display);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box relative border border-gray-800 bg-gray-950 text-white rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-gray-800">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🧮</span>
+            <h3 className="font-bold text-lg text-amber-400">آلة حاسبة ذكية</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowHistory(!showHistory)} className="p-2 rounded-xl text-gray-400 hover:text-amber-400 hover:bg-gray-800 transition">
+              📜
+            </button>
+            <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {showHistory ? (
+          <div className="h-64 overflow-y-auto space-y-2 p-2 bg-gray-900/60 rounded-2xl border border-gray-800">
+            {history.length === 0 ? (
+              <div className="text-center text-gray-500 py-10">لا يوجد سجل حسابات بعد</div>
+            ) : (
+              history.map((h, i) => (
+                <div key={i} onClick={() => { setDisplay(h.result); setShowHistory(false); }} className="flex justify-between items-center p-3 rounded-xl bg-gray-800/40 hover:bg-gray-800 cursor-pointer transition">
+                  <span className="text-gray-400 text-sm">{h.expr}</span>
+                  <span className="text-amber-400 font-bold">{h.result}</span>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="bg-gray-900/80 p-4 rounded-2xl border border-gray-800 mb-4 text-right">
+            <div className="text-gray-500 text-xs h-5 overflow-x-auto">{expression}</div>
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <button onClick={copyResult} className="text-xs px-2 py-1 rounded bg-gray-800 text-gray-400 hover:text-amber-400 transition">
+                {copied ? 'تم النسخ!' : '📋'}
+              </button>
+              <div className="text-3xl font-bold text-white tracking-wider overflow-x-auto whitespace-nowrap">{display}</div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-4 gap-2 mt-4">
+          <button onClick={handleAllClear} className="p-3 font-bold rounded-2xl bg-red-900/30 text-red-400 hover:bg-red-900/50 border border-red-800/40">AC</button>
+          <button onClick={handleClear} className="p-3 font-bold rounded-2xl bg-gray-800 text-gray-300 hover:bg-gray-700">C</button>
+          <button onClick={handleBackspace} className="p-3 font-bold rounded-2xl bg-gray-800 text-gray-300 hover:bg-gray-700">⌫</button>
+          <button onClick={() => handleOperator('÷')} className="p-3 font-bold rounded-2xl bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30">÷</button>
+
+          <button onClick={() => handleDigit('7')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">7</button>
+          <button onClick={() => handleDigit('8')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">8</button>
+          <button onClick={() => handleDigit('9')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">9</button>
+          <button onClick={() => handleOperator('×')} className="p-3 font-bold rounded-2xl bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30">×</button>
+
+          <button onClick={() => handleDigit('4')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">4</button>
+          <button onClick={() => handleDigit('5')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">5</button>
+          <button onClick={() => handleDigit('6')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">6</button>
+          <button onClick={() => handleOperator('-')} className="p-3 font-bold rounded-2xl bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30">-</button>
+
+          <button onClick={() => handleDigit('1')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">1</button>
+          <button onClick={() => handleDigit('2')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">2</button>
+          <button onClick={() => handleDigit('3')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">3</button>
+          <button onClick={() => handleOperator('+')} className="p-3 font-bold rounded-2xl bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30">+</button>
+
+          <button onClick={handleToggleSign} className="p-3 font-bold rounded-2xl bg-gray-800 text-gray-300 hover:bg-gray-700">±</button>
+          <button onClick={() => handleDigit('0')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">0</button>
+          <button onClick={handleDecimal} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">.</button>
+          <button onClick={handleEqual} className="p-3 font-bold rounded-2xl bg-amber-500 text-black hover:bg-amber-400 shadow-lg shadow-amber-500/20">=</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===================== DASHBOARD =====================
 function Dashboard({ onNavigate }) {
   const { userData, logout, db, fb } = useAuth();
   const [activeTab, setActiveTab] = useState("home");
   const [unread, setUnread] = useState(0);
+  const [showCalc, setShowCalc] = useState(false);
 
   useEffect(() => {
     if (!db||!fb||!userData) return;
@@ -530,18 +725,20 @@ function Dashboard({ onNavigate }) {
 
   return (
     <div className="min-h-screen pb-20 md:pb-0" style={{background:'#0a0a0a'}}>
+      <CalculatorModal isOpen={showCalc} onClose={()=>setShowCalc(false)} />
       <header className="glass sticky top-0 z-50 border-b border-gray-800">
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl bg-gradient-to-br from-gray-700 to-gray-900 flex items-center justify-center">
-              <span className="text-lg font-bold text-gray-300">F</span>
-            </div>
+            <img src="icon.png" className="w-10 h-10 rounded-xl object-cover border border-amber-500/30" alt="Fantex Icon" />
             <div>
               <h1 className="font-bold text-lg">Fantex</h1>
               <p className="text-xs text-gray-500">{userData?.name} | {isWH?"📦 مخزن":"🏪 محل"}</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={()=>setShowCalc(true)} title="آلة حاسبة" className="p-2 rounded-lg hover:bg-gray-800 text-amber-400 hover:text-amber-300 transition-all">
+              🧮
+            </button>
             <button onClick={()=>setActiveTab("notifications")} className="relative p-2 rounded-lg hover:bg-gray-800 text-gray-400 hover:text-white transition-all">
               🔔
               {unread>0 && <span className="absolute top-1 right-1 w-2.5 h-2.5 bg-red-500 rounded-full notification-dot"></span>}
@@ -963,6 +1160,266 @@ function ShipModal({ order, warehouseMembers, onClose, onConfirm }) {
   );
 }
 
+// ===================== QUICK SUBTOTAL MODAL =====================
+function QuickSubtotalModal({ fabric, onClose }) {
+  const sequence = fabric.sequence || [];
+  const totalRolls = sequence.length;
+  const price = fabric.price || 0;
+  const unit = fabric.unit || '';
+  const fabricName = fabric.fabricType || fabric.fabricName || 'القماش';
+
+  const defaultCount = totalRolls > 5 ? 5 : totalRolls;
+  const [selectedIndices, setSelectedIndices] = React.useState(() => {
+    const set = new Set();
+    for (let i = 0; i < defaultCount; i++) {
+      set.add(totalRolls - 1 - i);
+    }
+    return set;
+  });
+
+  const selectLastN = (n) => {
+    const count = Math.min(Math.max(1, n), totalRolls);
+    const set = new Set();
+    for (let i = 0; i < count; i++) {
+      set.add(totalRolls - 1 - i);
+    }
+    setSelectedIndices(set);
+  };
+
+  const selectAll = () => {
+    const set = new Set();
+    for (let i = 0; i < totalRolls; i++) {
+      set.add(i);
+    }
+    setSelectedIndices(set);
+  };
+
+  const toggleIndex = (idx) => {
+    const next = new Set(selectedIndices);
+    if (next.has(idx)) next.delete(idx);
+    else next.add(idx);
+    setSelectedIndices(next);
+  };
+
+  const subtotalQty = Array.from(selectedIndices).reduce((sum, idx) => sum + (sequence[idx] || 0), 0);
+  const totalAllQty = sequence.reduce((sum, v) => sum + v, 0);
+  const subtotalPrice = subtotalQty * price;
+  const percentage = totalAllQty > 0 ? ((subtotalQty / totalAllQty) * 100).toFixed(1) : '0';
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box text-right" dir="rtl">
+        <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-4">
+          <h3 className="text-lg font-bold text-yellow-400 flex items-center gap-2">
+            <span>🧮</span> حساب مجموع جزئي للأسطوانات ({fabricName})
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">✕</button>
+        </div>
+
+        <div className="space-y-4">
+          <div>
+            <p className="text-xs text-gray-400 mb-2 font-semibold">اختيار سريع لأحدث الأسطوانات:</p>
+            <div className="flex gap-2 flex-wrap">
+              <button onClick={() => selectLastN(3)} className="px-3 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-700 hover:border-yellow-500 text-gray-200">أحدث 3 أسطوانات</button>
+              <button onClick={() => selectLastN(5)} className="px-3 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-700 hover:border-yellow-500 text-gray-200">أحدث 5 أسطوانات</button>
+              <button onClick={() => selectLastN(10)} className="px-3 py-1.5 rounded-lg text-xs bg-gray-900 border border-gray-700 hover:border-yellow-500 text-gray-200">أحدث 10 أسطوانات</button>
+              <button onClick={selectAll} className="px-3 py-1.5 rounded-lg text-xs bg-yellow-500/20 border border-yellow-500/40 text-yellow-400">كل الأسطوانات ({totalRolls})</button>
+            </div>
+          </div>
+
+          <div>
+            <p className="text-xs text-gray-400 mb-2 font-semibold">الأسطوانات المحددة ({selectedIndices.size} من أصل {totalRolls}):</p>
+            <div className="flex flex-wrap gap-1.5 max-h-36 overflow-y-auto p-2 bg-gray-950/60 rounded-xl border border-gray-800">
+              {sequence.map((val, idx) => {
+                const isSelected = selectedIndices.has(idx);
+                return (
+                  <button
+                    key={idx}
+                    type="button"
+                    onClick={() => toggleIndex(idx)}
+                    className={`px-2.5 py-1 rounded-lg text-xs font-mono transition-all ${isSelected ? 'bg-yellow-500 text-black font-bold' : 'bg-gray-900 text-gray-400 border border-gray-800'}`}
+                  >
+                    #{idx+1}: {val} {idx === totalRolls - 1 ? '★' : ''}
+                  </button>
+                );
+              })}
+            </div>
+          </div>
+
+          {/* Results box */}
+          <div className="p-4 rounded-xl bg-gradient-to-br from-yellow-950/30 to-gray-900 border border-yellow-500/30 space-y-2 text-sm">
+            <div className="flex justify-between">
+              <span className="text-gray-400">عدد الأسطوانات المحددة:</span>
+              <span className="font-bold text-white">{selectedIndices.size} أسطوانة</span>
+            </div>
+            <div className="flex justify-between border-t border-gray-800/80 pt-2">
+              <span className="text-gray-400">مجموع أمتار/كمية الـ {selectedIndices.size} أسطوانات:</span>
+              <span className="font-bold text-yellow-400 text-base">{subtotalQty.toFixed(1)} {unit}</span>
+            </div>
+            {price > 0 && (
+              <div className="flex justify-between">
+                <span className="text-gray-400">إجمالي السعر لهذه الأسطوانات فقط:</span>
+                <span className="font-bold text-green-400 text-lg">{subtotalPrice.toLocaleString()} د.ل</span>
+              </div>
+            )}
+            <div className="flex justify-between text-xs text-gray-500 pt-1">
+              <span>النسبة من إجمالي القماش:</span>
+              <span>{percentage}%</span>
+            </div>
+          </div>
+
+          <button onClick={onClose} className="w-full py-3 bg-yellow-600 hover:bg-yellow-500 text-black font-bold rounded-xl text-sm transition-all">
+            تم / إغلاق المعاينة
+          </button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
+// ===================== MERGE MODAL =====================
+function MergeModal({ sourceOrder, pendingOrders, onClose, onFullMerge, onTransferFabrics }) {
+  const [step, setStep] = useState("select_target");
+  const [targetOrder, setTargetOrder] = useState(null);
+  const [selectedIndices, setSelectedIndices] = useState([]);
+
+  const otherPendingOrders = (pendingOrders || []).filter(o => o.id !== sourceOrder.id);
+  const sourceFabrics = sourceOrder.fabrics || sourceOrder.items || [];
+
+  const toggleFabricIndex = (idx) => {
+    setSelectedIndices(prev => 
+      prev.includes(idx) ? prev.filter(i => i !== idx) : [...prev, idx]
+    );
+  };
+
+  return (
+    <div className="modal-overlay">
+      <div className="modal-box text-right" dir="rtl">
+        <div className="flex items-center justify-between border-b border-gray-800 pb-3 mb-4">
+          <h3 className="text-lg font-bold text-yellow-400 flex items-center gap-2">
+            <span>🔀</span> دمج ونقل الأقمشة بين الطلبيات
+          </h3>
+          <button onClick={onClose} className="text-gray-400 hover:text-white text-xl">✕</button>
+        </div>
+
+        {step === "select_target" && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-300">
+              اختر الطلبية الهدف التي تريد نقل الأقمشة إليها من الطلبية <span className="font-bold text-yellow-400">#{sourceOrder.receiptNumber || sourceOrder.id?.slice(-4)}</span>:
+            </p>
+
+            {otherPendingOrders.length === 0 ? (
+              <p className="text-gray-500 text-center py-6">لا توجد طلبات معلقة أخرى متاحة للدمج</p>
+            ) : (
+              <div className="space-y-2 max-h-60 overflow-y-auto pl-1">
+                {otherPendingOrders.map(t => (
+                  <div
+                    key={t.id}
+                    onClick={() => { setTargetOrder(t); setStep("choose_mode"); }}
+                    className="p-3 rounded-xl bg-gray-900/60 border border-gray-800 hover:border-yellow-500/50 cursor-pointer flex items-center justify-between transition-all"
+                  >
+                    <div>
+                      <p className="font-bold text-sm text-white">الطلبية #{t.receiptNumber || t.id?.slice(-4)} ({t.customerName || 'بدون اسم زبون'})</p>
+                      <p className="text-xs text-gray-400">بواسطة: {t.workerName || t.senderName || 'مستعمل'} • { (t.fabrics||t.items||[]).length } أقمشة</p>
+                    </div>
+                    <span className="text-xs bg-yellow-500/20 text-yellow-400 px-3 py-1 rounded-lg">اختيار ➔</span>
+                  </div>
+                ))}
+              </div>
+            )}
+          </div>
+        )}
+
+        {step === "choose_mode" && targetOrder && (
+          <div className="space-y-4">
+            <div className="p-3 bg-gray-900 rounded-xl border border-gray-800 text-xs text-gray-300">
+              الدمج من: <span className="text-yellow-400 font-bold">#{sourceOrder.receiptNumber || sourceOrder.id?.slice(-4)}</span> ➔ إلى: <span className="text-green-400 font-bold">#{targetOrder.receiptNumber || targetOrder.id?.slice(-4)} ({targetOrder.customerName || 'هدف'})</span>
+            </div>
+
+            <p className="text-sm text-gray-200 font-semibold mb-2">اختر طريقة الدمج:</p>
+
+            <button
+              onClick={() => onFullMerge(sourceOrder, targetOrder)}
+              className="w-full text-right p-4 rounded-xl bg-gradient-to-r from-amber-900/30 to-yellow-900/30 border border-amber-600/40 hover:border-amber-500 transition-all block group"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">📦</span>
+                <div>
+                  <h4 className="font-bold text-amber-300 text-sm">دمج الطلبية بالكامل</h4>
+                  <p className="text-xs text-gray-400">دمج جميع الأقمشة والبيانات من الطلبية المصدر وإلغائها نهائياً</p>
+                </div>
+              </div>
+            </button>
+
+            <button
+              onClick={() => setStep("select_fabrics")}
+              className="w-full text-right p-4 rounded-xl bg-gray-900/80 border border-blue-600/40 hover:border-blue-500 transition-all block group"
+            >
+              <div className="flex items-center gap-3">
+                <span className="text-2xl">✂️</span>
+                <div>
+                  <h4 className="font-bold text-blue-300 text-sm">دمج / نقل أقمشة محددة</h4>
+                  <p className="text-xs text-gray-400">اختر أقمشة معينة لنقلها ودمجها دون إلغاء باقي الطلبية المصدر</p>
+                </div>
+              </div>
+            </button>
+
+            <button onClick={() => setStep("select_target")} className="w-full py-2 text-xs text-gray-400 hover:text-white">➔ العودة لاختيار طلبية أخرى</button>
+          </div>
+        )}
+
+        {step === "select_fabrics" && targetOrder && (
+          <div className="space-y-4">
+            <p className="text-sm text-gray-300">
+              اختر الأقمشة التي تود نقلها من <span className="text-yellow-400 font-bold">#{sourceOrder.receiptNumber || sourceOrder.id?.slice(-4)}</span> إلى <span className="text-green-400 font-bold">#{targetOrder.receiptNumber || targetOrder.id?.slice(-4)}</span>:
+            </p>
+
+            <div className="space-y-2 max-h-60 overflow-y-auto pl-1">
+              {sourceFabrics.map((fab, idx) => {
+                const isSelected = selectedIndices.includes(idx);
+                const fabName = fab.fabricType || fab.fabricName || `قماش #${idx+1}`;
+                const totalQty = fab.sequence ? fab.sequence.reduce((a,b)=>a+b,0) : fab.quantity || 0;
+
+                return (
+                  <div
+                    key={idx}
+                    onClick={() => toggleFabricIndex(idx)}
+                    className={`p-3 rounded-xl border transition-all cursor-pointer flex items-center justify-between ${isSelected ? 'bg-yellow-950/40 border-yellow-500' : 'bg-gray-900 border-gray-800'}`}
+                  >
+                    <div className="flex items-center gap-3">
+                      <input
+                        type="checkbox"
+                        checked={isSelected}
+                        onChange={() => {}}
+                        className="w-4 h-4 accent-yellow-500 rounded"
+                      />
+                      <div>
+                        <p className="font-bold text-sm text-white">{fabName}</p>
+                        <p className="text-xs text-gray-400">الكمية: {totalQty} {fab.unit || ''}</p>
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+
+            <div className="flex gap-2 pt-2">
+              <button
+                disabled={selectedIndices.length === 0}
+                onClick={() => onTransferFabrics(sourceOrder, targetOrder, selectedIndices)}
+                className="flex-1 py-3 bg-yellow-600 hover:bg-yellow-500 disabled:opacity-40 text-black font-bold text-sm rounded-xl transition-all"
+              >
+                تأكيد نقل ودمج الأقمشة المحددة ({selectedIndices.length})
+              </button>
+              <button onClick={() => setStep("choose_mode")} className="px-4 py-3 bg-gray-800 text-gray-300 text-xs rounded-xl hover:bg-gray-700">إلغاء</button>
+            </div>
+          </div>
+        )}
+      </div>
+    </div>
+  );
+}
+
 // ===================== ORDERS TAB =====================
 function OrdersTab({ userData, db, fb }) {
   const [orders, setOrders] = useState([]);
@@ -978,6 +1435,128 @@ function OrdersTab({ userData, db, fb }) {
   const [quantities, setQuantities] = useState({});
   const [filter, setFilter] = useState("all");
   const [shipModal, setShipModal] = useState(null);
+  const [mergeModal, setMergeModal] = useState(null);
+  const [subtotalModal, setSubtotalModal] = useState(null);
+
+  const handleFullMerge = async (sourceOrder, targetOrder) => {
+    if (!sourceOrder || !targetOrder) return;
+    try {
+      let mergedCustomerName = targetOrder.customerName || '';
+      const srcCustomerName = sourceOrder.customerName || '';
+      if (srcCustomerName && !mergedCustomerName.includes(srcCustomerName)) {
+        mergedCustomerName = mergedCustomerName ? `${mergedCustomerName} + ${srcCustomerName}` : srcCustomerName;
+      }
+
+      const targetFabrics = JSON.parse(JSON.stringify(targetOrder.fabrics || targetOrder.items || []));
+      const sourceFabrics = sourceOrder.fabrics || sourceOrder.items || [];
+
+      sourceFabrics.forEach(srcFabric => {
+        const srcName = (srcFabric.fabricType || srcFabric.fabricName || '').trim().toLowerCase();
+        const existingIndex = targetFabrics.findIndex(f => 
+          (f.fabricType || f.fabricName || '').trim().toLowerCase() === srcName
+        );
+
+        if (existingIndex !== -1) {
+          const existing = targetFabrics[existingIndex];
+          if (srcFabric.lengths) {
+            if (!existing.lengths) existing.lengths = {};
+            Object.entries(srcFabric.lengths).forEach(([len, cnt]) => {
+              existing.lengths[len] = (existing.lengths[len] || 0) + cnt;
+            });
+          }
+          if (srcFabric.sequence) {
+            if (!existing.sequence) existing.sequence = [];
+            existing.sequence.push(...srcFabric.sequence);
+          }
+          if (srcFabric.quantity) {
+            existing.quantity = (existing.quantity || 0) + srcFabric.quantity;
+          }
+        } else {
+          targetFabrics.push(JSON.parse(JSON.stringify(srcFabric)));
+        }
+      });
+
+      const targetField = targetOrder.fabrics ? 'fabrics' : 'items';
+      await fb.updateDoc(fb.doc(db, "orders", targetOrder.id), {
+        customerName: mergedCustomerName,
+        [targetField]: targetFabrics
+      });
+
+      await fb.deleteDoc(fb.doc(db, "orders", sourceOrder.id));
+      setMergeModal(null);
+      alert("تم دمج الطلبيتين بالكامل بنجاح ✓");
+    } catch(e) {
+      console.error(e);
+      alert("حدث خطأ أثناء الدمج الكلي");
+    }
+  };
+
+  const handleTransferFabrics = async (sourceOrder, targetOrder, indicesToTransfer) => {
+    if (!sourceOrder || !targetOrder || !indicesToTransfer || indicesToTransfer.length === 0) return;
+    try {
+      const sourceFabrics = sourceOrder.fabrics || sourceOrder.items || [];
+      const remainingSourceFabrics = [];
+      const fabricsToMove = [];
+
+      sourceFabrics.forEach((f, idx) => {
+        if (indicesToTransfer.includes(idx)) {
+          fabricsToMove.push(f);
+        } else {
+          remainingSourceFabrics.push(f);
+        }
+      });
+
+      if (fabricsToMove.length === 0) return;
+
+      const targetFabrics = JSON.parse(JSON.stringify(targetOrder.fabrics || targetOrder.items || []));
+
+      fabricsToMove.forEach(srcFabric => {
+        const srcName = (srcFabric.fabricType || srcFabric.fabricName || '').trim().toLowerCase();
+        const existingIndex = targetFabrics.findIndex(f => 
+          (f.fabricType || f.fabricName || '').trim().toLowerCase() === srcName
+        );
+
+        if (existingIndex !== -1) {
+          const existing = targetFabrics[existingIndex];
+          if (srcFabric.lengths) {
+            if (!existing.lengths) existing.lengths = {};
+            Object.entries(srcFabric.lengths).forEach(([len, cnt]) => {
+              existing.lengths[len] = (existing.lengths[len] || 0) + cnt;
+            });
+          }
+          if (srcFabric.sequence) {
+            if (!existing.sequence) existing.sequence = [];
+            existing.sequence.push(...srcFabric.sequence);
+          }
+          if (srcFabric.quantity) {
+            existing.quantity = (existing.quantity || 0) + srcFabric.quantity;
+          }
+        } else {
+          targetFabrics.push(JSON.parse(JSON.stringify(srcFabric)));
+        }
+      });
+
+      const targetField = targetOrder.fabrics ? 'fabrics' : 'items';
+      await fb.updateDoc(fb.doc(db, "orders", targetOrder.id), {
+        [targetField]: targetFabrics
+      });
+
+      if (remainingSourceFabrics.length === 0) {
+        await fb.deleteDoc(fb.doc(db, "orders", sourceOrder.id));
+      } else {
+        const sourceField = sourceOrder.fabrics ? 'fabrics' : 'items';
+        await fb.updateDoc(fb.doc(db, "orders", sourceOrder.id), {
+          [sourceField]: remainingSourceFabrics
+        });
+      }
+
+      setMergeModal(null);
+      alert("تم نقل الأقمشة المحددة ودمجها في الطلبية بنجاح ✓");
+    } catch(e) {
+      console.error(e);
+      alert("حدث خطأ أثناء نقل الأقمشة");
+    }
+  };
 
   // Quick Order State and Refs
   const [orderType, setOrderType] = useState("normal");
@@ -1237,6 +1816,21 @@ function OrdersTab({ userData, db, fb }) {
 
   return (
     <div className="space-y-6 fade-in">
+      {subtotalModal && (
+        <QuickSubtotalModal
+          fabric={subtotalModal}
+          onClose={() => setSubtotalModal(null)}
+        />
+      )}
+      {mergeModal && (
+        <MergeModal
+          sourceOrder={mergeModal}
+          pendingOrders={orders.filter(x => x.status === "pending")}
+          onClose={() => setMergeModal(null)}
+          onFullMerge={handleFullMerge}
+          onTransferFabrics={handleTransferFabrics}
+        />
+      )}
       {shipModal && <ShipModal order={shipModal} warehouseMembers={warehouseMembers} onClose={()=>setShipModal(null)} onConfirm={confirmShip} />}
 
       <div className="flex items-center justify-between flex-wrap gap-4">
@@ -1491,14 +2085,44 @@ function OrdersTab({ userData, db, fb }) {
                 <p className="text-xl font-bold">{o.total?.toLocaleString()} د.ج</p>
               </div>
 
-              {/* Items */}
-              <div className="flex flex-wrap gap-2 mb-3">
-                {o.items?.map((item,i)=>(
-                  <div key={i} className="flex items-center gap-2 bg-gray-900/50 rounded-lg px-3 py-1.5 text-xs">
-                    <div className="w-3 h-3 rounded-full border border-gray-700" style={{backgroundColor:item.colorHex}}></div>
-                    <span className="text-gray-300">{item.fabricName} — {item.color} × {item.quantity}</span>
+              {/* Items & Fabrics */}
+              <div className="space-y-2 mb-3">
+                {o.status === "pending" && (
+                  <div className="flex justify-end">
+                    <button
+                      type="button"
+                      onClick={() => setMergeModal(o)}
+                      className="px-3 py-1.5 rounded-lg bg-yellow-500/10 border border-yellow-500/30 text-yellow-400 text-xs hover:bg-yellow-500/20 transition-all flex items-center gap-1.5 font-medium"
+                      title="دمج هذه الطلبية أو نقل أقمشة منها إلى طلبية أخرى"
+                    >
+                      <span>🔀</span> دمج / نقل أقمشة
+                    </button>
                   </div>
-                ))}
+                )}
+                <div className="flex flex-wrap gap-2">
+                  {(o.fabrics || o.items || []).map((fab, i) => {
+                    const fabName = fab.fabricType || fab.fabricName || fab.name || `قماش #${i+1}`;
+                    const totalQty = fab.sequence ? fab.sequence.reduce((a,b)=>a+b,0) : fab.quantity || 0;
+                    const fabUnit = fab.unit || '';
+                    return (
+                      <div key={i} className="flex items-center gap-2 bg-gray-900/60 rounded-xl px-3 py-1.5 text-xs border border-gray-800">
+                        {fab.colorHex && <div className="w-3 h-3 rounded-full border border-gray-700" style={{backgroundColor:fab.colorHex}}></div>}
+                        <span className="text-gray-200 font-medium">{fabName} {fab.color ? `(${fab.color})` : ''}</span>
+                        <span className="text-gray-400">• {totalQty} {fabUnit}</span>
+                        {o.status === "pending" && (
+                          <button
+                            type="button"
+                            onClick={() => setMergeModal(o)}
+                            className="text-yellow-400 hover:text-yellow-300 text-[11px] px-1.5 py-0.5 rounded bg-yellow-500/10 border border-yellow-500/20 hover:bg-yellow-500/20 mr-1"
+                            title="نقل هذا القماش إلى طلبية أخرى"
+                          >
+                            ⇄ نقل
+                          </button>
+                        )}
+                      </div>
+                    );
+                  })}
+                </div>
               </div>
 
               {/* Shipped details */}

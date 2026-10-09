@@ -413,26 +413,223 @@ function LoginScreen() {
   );
 }
 
+// ===================== CALCULATOR MODAL =====================
+function CalculatorModal({ isOpen, onClose }) {
+  if (!isOpen) return null;
+  const [display, setDisplay] = useState('0');
+  const [expression, setExpression] = useState('');
+  const [firstOperand, setFirstOperand] = useState(null);
+  const [operator, setOperator] = useState(null);
+  const [waitingForSecond, setWaitingForSecond] = useState(false);
+  const [history, setHistory] = useState([]);
+  const [showHistory, setShowHistory] = useState(false);
+  const [copied, setCopied] = useState(false);
+
+  const formatNum = (num) => {
+    if (isNaN(num) || !isFinite(num)) return 'خطأ';
+    if (Number.isInteger(num)) return num.toString();
+    let s = num.toFixed(4);
+    while (s.includes('.') && (s.endsWith('0') || s.endsWith('.'))) {
+      s = s.slice(0, -1);
+    }
+    return s;
+  };
+
+  const handleDigit = (d) => {
+    if (waitingForSecond) {
+      setDisplay(d === '00' ? '0' : d);
+      setWaitingForSecond(false);
+    } else {
+      if (display === '0') {
+        if (d === '00') return;
+        setDisplay(d);
+      } else {
+        if (display.length < 15) setDisplay(display + d);
+      }
+    }
+  };
+
+  const handleDecimal = () => {
+    if (waitingForSecond) {
+      setDisplay('0.');
+      setWaitingForSecond(false);
+    } else if (!display.includes('.')) {
+      setDisplay(display + '.');
+    }
+  };
+
+  const handleToggleSign = () => {
+    if (display === '0' || display === 'خطأ') return;
+    setDisplay(display.startsWith('-') ? display.slice(1) : '-' + display);
+  };
+
+  const handleClear = () => setDisplay('0');
+  const handleAllClear = () => {
+    setDisplay('0');
+    setExpression('');
+    setFirstOperand(null);
+    setOperator(null);
+    setWaitingForSecond(false);
+  };
+
+  const handleBackspace = () => {
+    if (waitingForSecond || display === 'خطأ') {
+      setDisplay('0');
+      setWaitingForSecond(false);
+      return;
+    }
+    if (display.length > 1) {
+      const next = display.slice(0, -1);
+      setDisplay(next === '-' || !next ? '0' : next);
+    } else {
+      setDisplay('0');
+    }
+  };
+
+  const calculate = (op1, op2, op) => {
+    switch(op) {
+      case '+': return op1 + op2;
+      case '-': return op1 - op2;
+      case '×': return op1 * op2;
+      case '÷': return op2 !== 0 ? op1 / op2 : NaN;
+      default: return op2;
+    }
+  };
+
+  const handleOperator = (op) => {
+    const currentVal = parseFloat(display);
+    if (isNaN(currentVal)) return;
+
+    if (firstOperand === null) {
+      setFirstOperand(currentVal);
+    } else if (operator && !waitingForSecond) {
+      const res = calculate(firstOperand, currentVal, operator);
+      setDisplay(formatNum(res));
+      setFirstOperand(res);
+    }
+    setOperator(op);
+    setExpression(`${formatNum(firstOperand !== null && !waitingForSecond ? calculate(firstOperand, currentVal, operator) : (firstOperand ?? currentVal))} ${op}`);
+    setWaitingForSecond(true);
+  };
+
+  const handleEqual = () => {
+    if (firstOperand === null || !operator) return;
+    const secondOperand = parseFloat(display) || 0;
+    const res = calculate(firstOperand, secondOperand, operator);
+    const resStr = formatNum(res);
+    const exprStr = `${formatNum(firstOperand)} ${operator} ${formatNum(secondOperand)}`;
+
+    setHistory([{ expr: exprStr, result: resStr }, ...history]);
+    setExpression(`${exprStr} =`);
+    setDisplay(resStr);
+    setFirstOperand(isNaN(res) ? null : res);
+    setOperator(null);
+    setWaitingForSecond(true);
+  };
+
+  const copyResult = () => {
+    navigator.clipboard.writeText(display);
+    setCopied(true);
+    setTimeout(() => setCopied(false), 2000);
+  };
+
+  return (
+    <div className="modal-overlay" onClick={onClose}>
+      <div className="modal-box relative border border-gray-800 bg-gray-950 text-white rounded-3xl p-6 w-full max-w-sm shadow-2xl" onClick={e => e.stopPropagation()}>
+        <div className="flex items-center justify-between pb-4 mb-4 border-b border-gray-800">
+          <div className="flex items-center gap-2">
+            <span className="text-xl">🧮</span>
+            <h3 className="font-bold text-lg text-amber-400">آلة حاسبة ذكية</h3>
+          </div>
+          <div className="flex items-center gap-2">
+            <button onClick={() => setShowHistory(!showHistory)} className="p-2 rounded-xl text-gray-400 hover:text-amber-400 hover:bg-gray-800 transition">
+              📜
+            </button>
+            <button onClick={onClose} className="p-2 rounded-xl text-gray-400 hover:text-white hover:bg-gray-800 transition">
+              ✕
+            </button>
+          </div>
+        </div>
+
+        {showHistory ? (
+          <div className="h-64 overflow-y-auto space-y-2 p-2 bg-gray-900/60 rounded-2xl border border-gray-800">
+            {history.length === 0 ? (
+              <div className="text-center text-gray-500 py-10">لا يوجد سجل حسابات بعد</div>
+            ) : (
+              history.map((h, i) => (
+                <div key={i} onClick={() => { setDisplay(h.result); setShowHistory(false); }} className="flex justify-between items-center p-3 rounded-xl bg-gray-800/40 hover:bg-gray-800 cursor-pointer transition">
+                  <span className="text-gray-400 text-sm">{h.expr}</span>
+                  <span className="text-amber-400 font-bold">{h.result}</span>
+                </div>
+              ))
+            )}
+          </div>
+        ) : (
+          <div className="bg-gray-900/80 p-4 rounded-2xl border border-gray-800 mb-4 text-right">
+            <div className="text-gray-500 text-xs h-5 overflow-x-auto">{expression}</div>
+            <div className="flex items-center justify-between gap-2 mt-1">
+              <button onClick={copyResult} className="text-xs px-2 py-1 rounded bg-gray-800 text-gray-400 hover:text-amber-400 transition">
+                {copied ? 'تم النسخ!' : '📋'}
+              </button>
+              <div className="text-3xl font-bold text-white tracking-wider overflow-x-auto whitespace-nowrap">{display}</div>
+            </div>
+          </div>
+        )}
+
+        <div className="grid grid-cols-4 gap-2 mt-4">
+          <button onClick={handleAllClear} className="p-3 font-bold rounded-2xl bg-red-900/30 text-red-400 hover:bg-red-900/50 border border-red-800/40">AC</button>
+          <button onClick={handleClear} className="p-3 font-bold rounded-2xl bg-gray-800 text-gray-300 hover:bg-gray-700">C</button>
+          <button onClick={handleBackspace} className="p-3 font-bold rounded-2xl bg-gray-800 text-gray-300 hover:bg-gray-700">⌫</button>
+          <button onClick={() => handleOperator('÷')} className="p-3 font-bold rounded-2xl bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30">÷</button>
+
+          <button onClick={() => handleDigit('7')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">7</button>
+          <button onClick={() => handleDigit('8')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">8</button>
+          <button onClick={() => handleDigit('9')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">9</button>
+          <button onClick={() => handleOperator('×')} className="p-3 font-bold rounded-2xl bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30">×</button>
+
+          <button onClick={() => handleDigit('4')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">4</button>
+          <button onClick={() => handleDigit('5')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">5</button>
+          <button onClick={() => handleDigit('6')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">6</button>
+          <button onClick={() => handleOperator('-')} className="p-3 font-bold rounded-2xl bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30">-</button>
+
+          <button onClick={() => handleDigit('1')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">1</button>
+          <button onClick={() => handleDigit('2')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">2</button>
+          <button onClick={() => handleDigit('3')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">3</button>
+          <button onClick={() => handleOperator('+')} className="p-3 font-bold rounded-2xl bg-amber-500/20 text-amber-400 hover:bg-amber-500/30 border border-amber-500/30">+</button>
+
+          <button onClick={handleToggleSign} className="p-3 font-bold rounded-2xl bg-gray-800 text-gray-300 hover:bg-gray-700">±</button>
+          <button onClick={() => handleDigit('0')} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">0</button>
+          <button onClick={handleDecimal} className="p-3 font-bold rounded-2xl bg-gray-900 text-white hover:bg-gray-800 border border-gray-800">.</button>
+          <button onClick={handleEqual} className="p-3 font-bold rounded-2xl bg-amber-500 text-black hover:bg-amber-400 shadow-lg shadow-amber-500/20">=</button>
+        </div>
+      </div>
+    </div>
+  );
+}
+
 // ===================== ADMIN DASHBOARD =====================
 function AdminDashboard() {
   const { userData, logout, db, fb } = useAuth();
   const { isDark, toggleTheme } = useTheme();
   const [activeTab, setActiveTab] = useState("overview");
+  const [showCalc, setShowCalc] = useState(false);
 
   return (
     <div className="min-h-screen pb-20 md:pb-0" style={{ background: 'var(--bg-primary)' }}>
+      <CalculatorModal isOpen={showCalc} onClose={()=>setShowCalc(false)} />
       <header className="glass sticky top-0 z-50 border-b" style={{ borderColor: 'var(--border-color)' }}>
         <div className="max-w-7xl mx-auto px-4 py-4 flex items-center justify-between">
           <div className="flex items-center gap-3">
-            <div className="w-10 h-10 rounded-xl flex items-center justify-center border" style={{ background: 'linear-gradient(135deg, #713f12, #a16207)', borderColor: 'var(--accent-color)' }}>
-              <span className="text-lg font-bold" style={{ color: 'var(--accent-color)' }}>F</span>
-            </div>
+            <img src="icon.png" className="w-10 h-10 rounded-xl object-cover border border-amber-500/30" alt="Fantex Icon" />
             <div>
               <h1 className="font-bold text-lg" style={{ color: 'var(--accent-color)' }}>Fantex Admin</h1>
               <p className="text-xs" style={{ color: 'var(--text-muted)' }}>{userData?.name} | 👑 مدير النظام</p>
             </div>
           </div>
           <div className="flex items-center gap-2">
+            <button onClick={()=>setShowCalc(true)} title="آلة حاسبة" className="p-2 rounded-lg transition-all text-amber-400 hover:text-amber-300">
+              🧮
+            </button>
             <button onClick={toggleTheme} className="p-2 rounded-lg transition-all" style={{ color: 'var(--text-muted)' }} title={isDark ? 'وضع مضيء' : 'وضع مظلم'}>
               {isDark ? '☀️' : '🌙'}
             </button>

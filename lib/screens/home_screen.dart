@@ -14,6 +14,7 @@ import 'profile_screen.dart';
 import 'settings_screen.dart';
 import '../providers/order_provider.dart';
 import '../widgets/order_card.dart';
+import '../widgets/calculator_modal.dart';
 
 /// Main home screen with bottom navigation bar.
 /// Four tabs: Orders, New Order, History, Profile
@@ -267,6 +268,20 @@ class HomeScreenState extends State<HomeScreen> {
           const SizedBox(width: 4),
 
 
+
+          // Calculator
+          IconButton(
+            padding: const EdgeInsets.all(4),
+            constraints: const BoxConstraints(),
+            icon: Icon(
+              Icons.calculate_rounded,
+              color: AppTheme.accentAmber,
+              size: 20,
+            ),
+            onPressed: () => showCalculatorModal(context),
+            tooltip: 'آلة حاسبة',
+          ),
+          const SizedBox(width: 4),
 
           // Sign out
           IconButton(

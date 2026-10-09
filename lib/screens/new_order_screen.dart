@@ -11,6 +11,7 @@ import 'package:record/record.dart';
 import 'package:audioplayers/audioplayers.dart';
 import 'package:path_provider/path_provider.dart';
 import 'package:http/http.dart' as http;
+import '../models/order_model.dart';
 import '../providers/auth_provider.dart' as app_auth;
 import '../providers/language_provider.dart';
 import '../providers/order_provider.dart';
@@ -495,36 +496,125 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     }
   }
 
-  Future<void> _saveOrderLocally() async {
-    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
-    final authProvider =
-        Provider.of<app_auth.AuthProvider>(context, listen: false);
+  Future<void> _handleGreenSaveButton(
+      OrderProvider orderProvider, bool isAr) async {
+    final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final offlineDrafts = orderProvider.offlineOrders.where((o) => o.isDraft).toList();
+    final customerName = _customerNameController.text.trim();
+    final hasFabrics = orderProvider.fabricEntries.any((f) => f.fabricType.isNotEmpty || f.sequence.isNotEmpty);
+    final hasEditorData = customerName.isNotEmpty || hasFabrics;
 
-    // Validate first
-    final validationError = orderProvider.validateOrder();
-    if (validationError != null) {
-      _showSnackBar(validationError, isError: true);
+    // Case 1: Editor is empty and saved drafts exist -> RESTORE DRAFT IMMEDIATELY!
+    if (!hasEditorData && offlineDrafts.isNotEmpty) {
+      if (offlineDrafts.length == 1) {
+        final draftToRestore = offlineDrafts.first;
+        orderProvider.loadOrder(draftToRestore);
+        _customerNameController.text = draftToRestore.customerName ?? '';
+        await orderProvider.removeOfflineOrder(draftToRestore.id);
+        if (mounted) {
+          _showSnackBar(isAr ? 'تم استرجاع المسودة للتحرير بنجاح ✓' : 'Draft restored for editing ✓', isError: false);
+        }
+        return;
+      } else {
+        _showDraftRestoreSelector(context, orderProvider, offlineDrafts, isAr);
+        return;
+      }
+    }
+
+    // Case 2: Editor has data -> SAVE CURRENT DRAFT!
+    if (hasEditorData) {
+      await orderProvider.saveOfflineOrder(
+        senderId: authProvider.user?.uid ?? 'local_user',
+        senderName: authProvider.displayName,
+        customerName: customerName.isEmpty ? (isAr ? 'مسودة بدون اسم' : 'Unnamed Draft') : customerName,
+        shopId: authProvider.appUser?.shopId ?? '',
+        isDraft: true,
+      );
+      _customerNameController.clear();
+      if (mounted) {
+        _showSnackBar(
+          isAr
+              ? 'تم حفظ المسودة بنجاح ✓ (انقر على الزر الأخضر في أي وقت لاسترجاعها مباشرة)'
+              : 'Draft saved successfully ✓ (Tap green button anytime to restore)',
+          isError: false,
+        );
+      }
       return;
     }
 
-    final isAr = context.tr('tab_orders') == 'الطلبيات';
-    await orderProvider.saveOfflineOrder(
-      senderId: authProvider.user!.uid,
-      senderName: authProvider.displayName,
-      customerName: _customerNameController.text.trim(),
-      shopId: authProvider.appUser?.shopId ?? '',
-      isDraft: true,
+    // Case 3: Editor is empty and no saved drafts exist
+    _showSnackBar(
+      isAr ? 'يرجى إدخال اسم الزبون أو قماش واحد على الأقل لحفظ المسودة' : 'Please enter customer name or fabric to save draft',
+      isError: true,
     );
+  }
 
-    _customerNameController.clear();
-    if (mounted) {
-      _showSnackBar(
-        isAr
-            ? 'تم حفظ الطلبية كمسودة بنجاح ✓ يمكنك الرجوع إليها دائماً من الرئيسية.'
-            : 'Order saved as draft successfully ✓ Available in home page.',
-        isError: false,
-      );
-    }
+  void _showDraftRestoreSelector(BuildContext context, OrderProvider orderProvider, List<Order> drafts, bool isAr) {
+    showModalBottomSheet(
+      context: context,
+      backgroundColor: AppTheme.surfaceDark,
+      shape: const RoundedRectangleBorder(borderRadius: BorderRadius.vertical(top: Radius.circular(24))),
+      builder: (ctx) => SafeArea(
+        child: Padding(
+          padding: const EdgeInsets.all(20),
+          child: Column(
+            mainAxisSize: MainAxisSize.min,
+            crossAxisAlignment: CrossAxisAlignment.start,
+            children: [
+              Row(
+                mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                children: [
+                  Text(
+                    isAr ? 'اختر مسودة لاسترجاعها' : 'Select Draft to Restore',
+                    style: TextStyle(fontSize: 18, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                  ),
+                  IconButton(
+                    icon: Icon(Icons.close_rounded, color: AppTheme.textMuted),
+                    onPressed: () => Navigator.pop(ctx),
+                  ),
+                ],
+              ),
+              const SizedBox(height: 12),
+              Flexible(
+                child: ListView.separated(
+                  shrinkWrap: true,
+                  itemCount: drafts.length,
+                  separatorBuilder: (_, __) => Divider(color: AppTheme.borderSubtle),
+                  itemBuilder: (context, idx) {
+                    final d = drafts[idx];
+                    return ListTile(
+                      contentPadding: EdgeInsets.zero,
+                      leading: CircleAvatar(
+                        backgroundColor: AppTheme.success.withValues(alpha: 0.2),
+                        child: Icon(Icons.edit_note_rounded, color: AppTheme.success),
+                      ),
+                      title: Text(
+                        d.customerName ?? (isAr ? 'مسودة بدون اسم' : 'Unnamed Draft'),
+                        style: TextStyle(fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                      ),
+                      subtitle: Text(
+                        '${d.fabrics.length} ${isAr ? "أقمشة" : "fabrics"} • ${d.createdAt.hour}:${d.createdAt.minute.toString().padLeft(2, '0')}',
+                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                      ),
+                      trailing: Icon(Icons.arrow_forward_ios_rounded, size: 16, color: AppTheme.accentAmber),
+                      onTap: () async {
+                        Navigator.pop(ctx);
+                        orderProvider.loadOrder(d);
+                        _customerNameController.text = d.customerName ?? '';
+                        await orderProvider.removeOfflineOrder(d.id);
+                        if (mounted) {
+                          _showSnackBar(isAr ? 'تم استرجاع المسودة للتحرير بنجاح ✓' : 'Draft restored for editing ✓', isError: false);
+                        }
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        ),
+      ),
+    );
   }
 
   void _showSnackBar(String message, {required bool isError}) {
@@ -721,76 +811,125 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
             ),
             child: SafeArea(
               top: false,
-              child: Row(
-                children: [
-                  // Save Order Button (Small Icon-Only - 52x52)
-                  SizedBox(
-                    height: 52,
-                    width: 52,
-                    child: Tooltip(
-                      message: isAr ? 'حفظ الطلبية محلياً' : 'Save Order Locally',
-                      child: IconButton(
-                        onPressed: orderProvider.isSending ? null : _saveOrderLocally,
-                        icon: const Icon(Icons.bookmark_add_rounded, size: 20),
-                        color: Colors.white,
-                        style: IconButton.styleFrom(
-                          backgroundColor: AppTheme.success,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Send Draft Button (Minimized to icon only)
-                  SizedBox(
-                    height: 52,
-                    width: 52,
-                    child: Tooltip(
-                      message: isAr ? 'إرسال مسودة للموظفين' : 'Send Draft to Staff',
-                      child: IconButton(
-                        onPressed: orderProvider.isSending ? null : _sendDraft,
-                        icon: const Icon(Icons.folder_shared_rounded, size: 20),
-                        color: Colors.white,
-                        style: IconButton.styleFrom(
-                          backgroundColor: Colors.orange.shade800,
-                          shape: RoundedRectangleBorder(
-                            borderRadius: BorderRadius.circular(16),
-                          ),
-                          padding: EdgeInsets.zero,
-                        ),
-                      ),
-                    ),
-                  ),
-                  const SizedBox(width: 8),
-                  // Send Order Button
-                  Expanded(
-                    child: ElevatedButton.icon(
-                      onPressed: orderProvider.isSending ? null : _sendOrder,
-                      icon: orderProvider.isSending
-                          ? SizedBox(
-                              height: 18,
-                              width: 18,
-                              child: CircularProgressIndicator(
-                                strokeWidth: 2,
-                                color: AppTheme.surfaceDark,
+              child: Builder(
+                builder: (context) {
+                  final offlineDrafts = orderProvider.offlineOrders.where((o) => o.isDraft).toList();
+                  final offlineDraftCount = offlineDrafts.length;
+                  final customerName = _customerNameController.text.trim();
+                  final hasFabrics = orderProvider.fabricEntries.any((f) => f.fabricType.isNotEmpty || f.sequence.isNotEmpty);
+                  final hasEditorData = customerName.isNotEmpty || hasFabrics;
+
+                  return Row(
+                    children: [
+                      // 1. Right Side (First child in RTL): Orange Button (Send draft / Drafts)
+                      SizedBox(
+                        height: 52,
+                        width: 52,
+                        child: Tooltip(
+                          message: isAr ? 'إرسال مسودة للموظفين' : 'Send Draft to Staff',
+                          child: IconButton(
+                            onPressed: orderProvider.isSending ? null : _sendDraft,
+                            icon: const Icon(Icons.folder_shared_rounded, size: 20),
+                            color: Colors.white,
+                            style: IconButton.styleFrom(
+                              backgroundColor: Colors.orange.shade800,
+                              shape: RoundedRectangleBorder(
+                                borderRadius: BorderRadius.circular(16),
                               ),
-                            )
-                          : const Icon(Icons.send_rounded, size: 18),
-                      label: Text(
-                        orderProvider.isSending
-                            ? context.tr('sending')
-                            : context.tr('send_order'),
-                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                              padding: EdgeInsets.zero,
+                            ),
+                          ),
+                        ),
                       ),
-                      style: ElevatedButton.styleFrom(
-                        padding: const EdgeInsets.symmetric(vertical: 16),
+                      const SizedBox(width: 8),
+
+                      // 2. Middle (Second child in RTL): Large Send Order Button
+                      Expanded(
+                        child: ElevatedButton.icon(
+                          onPressed: orderProvider.isSending ? null : _sendOrder,
+                          icon: orderProvider.isSending
+                              ? SizedBox(
+                                  height: 18,
+                                  width: 18,
+                                  child: CircularProgressIndicator(
+                                    strokeWidth: 2,
+                                    color: AppTheme.surfaceDark,
+                                  ),
+                                )
+                              : const Icon(Icons.send_rounded, size: 18),
+                          label: Text(
+                            orderProvider.isSending
+                                ? context.tr('sending')
+                                : context.tr('send_order'),
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                          style: ElevatedButton.styleFrom(
+                            padding: const EdgeInsets.symmetric(vertical: 16),
+                          ),
+                        ),
                       ),
-                    ),
-                  ),
-                ],
+                      const SizedBox(width: 8),
+
+                      // 3. Left Side (Third child in RTL): Green Button (Save/Restore Draft)
+                      SizedBox(
+                        height: 52,
+                        width: 52,
+                        child: Stack(
+                          clipBehavior: Clip.none,
+                          children: [
+                            Tooltip(
+                              message: hasEditorData
+                                  ? (isAr ? 'حفظ المسودة محلياً' : 'Save Draft Locally')
+                                  : (isAr ? 'استرجاع المسودة' : 'Restore Draft'),
+                              child: IconButton(
+                                onPressed: orderProvider.isSending
+                                    ? null
+                                    : () => _handleGreenSaveButton(orderProvider, isAr),
+                                icon: Icon(
+                                  hasEditorData ? Icons.bookmark_add_rounded : Icons.history_edu_rounded,
+                                  size: 20,
+                                ),
+                                color: Colors.white,
+                                style: IconButton.styleFrom(
+                                  backgroundColor: AppTheme.success,
+                                  shape: RoundedRectangleBorder(
+                                    borderRadius: BorderRadius.circular(16),
+                                  ),
+                                  padding: EdgeInsets.zero,
+                                ),
+                              ),
+                            ),
+                            if (offlineDraftCount > 0)
+                              Positioned(
+                                top: -4,
+                                right: -4,
+                                child: Container(
+                                  padding: const EdgeInsets.all(4),
+                                  decoration: const BoxDecoration(
+                                    color: Colors.redAccent,
+                                    shape: BoxShape.circle,
+                                  ),
+                                  constraints: const BoxConstraints(
+                                    minWidth: 18,
+                                    minHeight: 18,
+                                  ),
+                                  child: Text(
+                                    '$offlineDraftCount',
+                                    style: const TextStyle(
+                                      color: Colors.white,
+                                      fontSize: 10,
+                                      fontWeight: FontWeight.bold,
+                                    ),
+                                    textAlign: TextAlign.center,
+                                  ),
+                                ),
+                              ),
+                          ],
+                        ),
+                      ),
+                    ],
+                  );
+                },
               ),
             ),
           ),

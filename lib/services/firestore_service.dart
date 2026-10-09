@@ -596,6 +596,70 @@ class FirestoreService {
     await deleteOrderGroup(sourceOrder);
   }
 
+  /// Transfer specific fabrics (by index or list of indices) from sourceOrder to targetOrder.
+  Future<void> transferFabricsBetweenOrders({
+    required Order sourceOrder,
+    required Order targetOrder,
+    required List<int> fabricIndicesToTransfer,
+  }) async {
+    final List<FabricEntry> remainingSourceFabrics = [];
+    final List<FabricEntry> fabricsToMove = [];
+
+    for (int i = 0; i < sourceOrder.fabrics.length; i++) {
+      if (fabricIndicesToTransfer.contains(i)) {
+        fabricsToMove.add(sourceOrder.fabrics[i]);
+      } else {
+        remainingSourceFabrics.add(sourceOrder.fabrics[i]);
+      }
+    }
+
+    if (fabricsToMove.isEmpty) return;
+
+    final List<FabricEntry> updatedTargetFabrics = targetOrder.fabrics.map((f) {
+      return FabricEntry(
+        fabricType: f.fabricType,
+        unit: f.unit,
+        price: f.price,
+        lengths: Map<String, int>.from(f.lengths),
+        sequence: List<double>.from(f.sequence),
+      );
+    }).toList();
+
+    for (final srcFabric in fabricsToMove) {
+      final existingIndex = updatedTargetFabrics.indexWhere(
+        (f) => f.fabricType.trim().toLowerCase() == srcFabric.fabricType.trim().toLowerCase(),
+      );
+
+      if (existingIndex != -1) {
+        final existing = updatedTargetFabrics[existingIndex];
+        srcFabric.lengths.forEach((lengthStr, count) {
+          existing.lengths[lengthStr] = (existing.lengths[lengthStr] ?? 0) + count;
+        });
+        existing.sequence.addAll(srcFabric.sequence);
+      } else {
+        updatedTargetFabrics.add(FabricEntry(
+          fabricType: srcFabric.fabricType,
+          unit: srcFabric.unit,
+          price: srcFabric.price,
+          lengths: Map<String, int>.from(srcFabric.lengths),
+          sequence: List<double>.from(srcFabric.sequence),
+        ));
+      }
+    }
+
+    await _firestore.collection('orders').doc(targetOrder.id).update({
+      'fabrics': updatedTargetFabrics.map((f) => f.toMap()).toList(),
+    });
+
+    if (remainingSourceFabrics.isEmpty) {
+      await deleteOrderGroup(sourceOrder);
+    } else {
+      await _firestore.collection('orders').doc(sourceOrder.id).update({
+        'fabrics': remainingSourceFabrics.map((f) => f.toMap()).toList(),
+      });
+    }
+  }
+
   /// Separate (unmerge) a merged order back into its constituent orders
   Future<void> unmergeOrder(Order mergedOrder) async {
     final batch = _firestore.batch();
