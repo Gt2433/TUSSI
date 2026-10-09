@@ -30,6 +30,21 @@ class NewOrderScreen extends StatefulWidget {
 
 class _NewOrderScreenState extends State<NewOrderScreen> {
   final TextEditingController _customerNameController = TextEditingController();
+  bool _isCustomerNameErrorFlashed = false;
+
+  Future<void> _flashCustomerNameField() async {
+    if (!mounted) return;
+    setState(() => _isCustomerNameErrorFlashed = true);
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    setState(() => _isCustomerNameErrorFlashed = false);
+    await Future.delayed(const Duration(milliseconds: 200));
+    if (!mounted) return;
+    setState(() => _isCustomerNameErrorFlashed = true);
+    await Future.delayed(const Duration(milliseconds: 500));
+    if (!mounted) return;
+    setState(() => _isCustomerNameErrorFlashed = false);
+  }
 
   // --- Quick Order Recording State variables ---
   final AudioRecorder _quickAudioRecorder = AudioRecorder();
@@ -300,6 +315,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       return;
     }
 
+    if (_customerNameController.text.trim().isEmpty) {
+      _flashCustomerNameField();
+      return;
+    }
+
     if (orderProvider.isOffline) {
       final isAr = context.tr('tab_orders') == 'الطلبيات';
       final confirm = await showDialog<bool>(
@@ -475,6 +495,38 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     }
   }
 
+  Future<void> _saveOrderLocally() async {
+    final orderProvider = Provider.of<OrderProvider>(context, listen: false);
+    final authProvider =
+        Provider.of<app_auth.AuthProvider>(context, listen: false);
+
+    // Validate first
+    final validationError = orderProvider.validateOrder();
+    if (validationError != null) {
+      _showSnackBar(validationError, isError: true);
+      return;
+    }
+
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+    await orderProvider.saveOfflineOrder(
+      senderId: authProvider.user!.uid,
+      senderName: authProvider.displayName,
+      customerName: _customerNameController.text.trim(),
+      shopId: authProvider.appUser?.shopId ?? '',
+      isDraft: true,
+    );
+
+    _customerNameController.clear();
+    if (mounted) {
+      _showSnackBar(
+        isAr
+            ? 'تم حفظ الطلبية كمسودة بنجاح ✓ يمكنك الرجوع إليها دائماً من الرئيسية.'
+            : 'Order saved as draft successfully ✓ Available in home page.',
+        isError: false,
+      );
+    }
+  }
+
   void _showSnackBar(String message, {required bool isError}) {
     ScaffoldMessenger.of(context).showSnackBar(
       SnackBar(
@@ -570,18 +622,45 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                   Row(
                     children: [
                       Expanded(
-                        child: TextField(
-                          controller: _customerNameController,
-                          onChanged: (val) {
-                            orderProvider.draftCustomerName = val;
-                          },
-                          decoration: InputDecoration(
-                            labelText: context.tr('customer_name') ?? 'اسم الزبون (اختياري)',
-                            hintText: context.tr('customer_hint') ?? 'أدخل اسم الزبون',
-                            prefixIcon: const Icon(Icons.person_outline_rounded),
-                            contentPadding: const EdgeInsets.symmetric(
-                              horizontal: 16,
-                              vertical: 14,
+                        child: AnimatedContainer(
+                          duration: const Duration(milliseconds: 200),
+                          decoration: BoxDecoration(
+                            color: _isCustomerNameErrorFlashed
+                                ? Colors.red.withValues(alpha: 0.25)
+                                : Colors.transparent,
+                            borderRadius: BorderRadius.circular(12),
+                            border: Border.all(
+                              color: _isCustomerNameErrorFlashed ? Colors.red : Colors.transparent,
+                              width: _isCustomerNameErrorFlashed ? 2.5 : 0,
+                            ),
+                          ),
+                          child: TextField(
+                            controller: _customerNameController,
+                            onChanged: (val) {
+                              orderProvider.draftCustomerName = val;
+                            },
+                            decoration: InputDecoration(
+                              labelText: isAr ? 'اسم الزبون (مطلوب للإرسال)' : 'Customer Name (Required)',
+                              hintText: isAr ? 'أدخل اسم الزبون أو اختر Achat' : 'Enter customer name or pick Achat',
+                              prefixIcon: const Icon(Icons.person_outline_rounded),
+                              suffixIcon: Padding(
+                                padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 8),
+                                child: ActionChip(
+                                  avatar: const Icon(Icons.inventory_2_rounded, size: 14, color: Colors.white),
+                                  label: const Text('Achat', style: TextStyle(fontSize: 12, fontWeight: FontWeight.bold, color: Colors.white)),
+                                  backgroundColor: Colors.grey.shade800,
+                                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(8)),
+                                  onPressed: () {
+                                    _customerNameController.text = 'Achat';
+                                    orderProvider.draftCustomerName = 'Achat';
+                                    FocusScope.of(context).unfocus();
+                                  },
+                                ),
+                              ),
+                              contentPadding: const EdgeInsets.symmetric(
+                                horizontal: 16,
+                                vertical: 14,
+                              ),
                             ),
                           ),
                         ),
@@ -644,24 +723,48 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
               top: false,
               child: Row(
                 children: [
+                  // Save Order Button (Small Icon-Only - 52x52)
+                  SizedBox(
+                    height: 52,
+                    width: 52,
+                    child: Tooltip(
+                      message: isAr ? 'حفظ الطلبية محلياً' : 'Save Order Locally',
+                      child: IconButton(
+                        onPressed: orderProvider.isSending ? null : _saveOrderLocally,
+                        icon: const Icon(Icons.bookmark_add_rounded, size: 20),
+                        color: Colors.white,
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppTheme.success,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          padding: EdgeInsets.zero,
+                        ),
+                      ),
+                    ),
+                  ),
+                  const SizedBox(width: 8),
                   // Send Draft Button (Minimized to icon only)
                   SizedBox(
                     height: 52,
                     width: 52,
-                    child: IconButton(
-                      onPressed: orderProvider.isSending ? null : _sendDraft,
-                      icon: const Icon(Icons.folder_shared_rounded, size: 20),
-                      color: Colors.white,
-                      style: IconButton.styleFrom(
-                        backgroundColor: Colors.orange.shade800,
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(16),
+                    child: Tooltip(
+                      message: isAr ? 'إرسال مسودة للموظفين' : 'Send Draft to Staff',
+                      child: IconButton(
+                        onPressed: orderProvider.isSending ? null : _sendDraft,
+                        icon: const Icon(Icons.folder_shared_rounded, size: 20),
+                        color: Colors.white,
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.orange.shade800,
+                          shape: RoundedRectangleBorder(
+                            borderRadius: BorderRadius.circular(16),
+                          ),
+                          padding: EdgeInsets.zero,
                         ),
-                        padding: EdgeInsets.zero,
                       ),
                     ),
                   ),
-                  const SizedBox(width: 12),
+                  const SizedBox(width: 8),
                   // Send Order Button
                   Expanded(
                     child: ElevatedButton.icon(
@@ -680,7 +783,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                         orderProvider.isSending
                             ? context.tr('sending')
                             : context.tr('send_order'),
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                        style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
                       ),
                       style: ElevatedButton.styleFrom(
                         padding: const EdgeInsets.symmetric(vertical: 16),

@@ -33,6 +33,7 @@ class OrderProvider extends ChangeNotifier {
 
   OrderProvider() {
     _loadOfflineData();
+    _loadActiveDraftFromPrefs();
     startConnectivityCheck();
   }
 
@@ -97,6 +98,54 @@ class OrderProvider extends ChangeNotifier {
     }
   }
 
+  Future<void> _saveActiveDraftToPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      if (_fabricEntries.isEmpty && _draftCustomerName.isEmpty && (_draftVoiceNoteBase64 == null || _draftVoiceNoteBase64!.isEmpty)) {
+        await prefs.remove('active_order_draft_autosave');
+        return;
+      }
+      final data = {
+        'customerName': _draftCustomerName,
+        'voiceNoteBase64': _draftVoiceNoteBase64,
+        'fabricEntries': _fabricEntries.map((e) => e.toMap()).toList(),
+      };
+      await prefs.setString('active_order_draft_autosave', jsonEncode(data));
+    } catch (e) {
+      print('Error saving active draft to prefs: $e');
+    }
+  }
+
+  Future<void> _loadActiveDraftFromPrefs() async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      final jsonStr = prefs.getString('active_order_draft_autosave');
+      if (jsonStr != null && jsonStr.isNotEmpty) {
+        final Map<String, dynamic> data = jsonDecode(jsonStr);
+        _draftCustomerName = data['customerName'] as String? ?? '';
+        _draftVoiceNoteBase64 = data['voiceNoteBase64'] as String?;
+        final rawEntries = data['fabricEntries'] as List<dynamic>? ?? [];
+        if (rawEntries.isNotEmpty) {
+          _fabricEntries = rawEntries.map((e) => FabricEntry.fromMap(e as Map<String, dynamic>)).toList();
+        }
+        notifyListeners();
+      }
+    } catch (e) {
+      print('Error loading active draft from prefs: $e');
+    }
+  }
+
+  Future<void> clearActiveDraft() async {
+    _fabricEntries = [FabricEntry(fabricType: '', price: 0.0)];
+    _draftCustomerName = '';
+    _draftVoiceNoteBase64 = null;
+    notifyListeners();
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.remove('active_order_draft_autosave');
+    } catch (_) {}
+  }
+
   Future<void> saveOfflineOrder({
     required String senderId,
     required String senderName,
@@ -127,9 +176,7 @@ class OrderProvider extends ChangeNotifier {
     await _saveOfflineOrdersToPrefs();
 
     // Reset fields
-    _fabricEntries = [FabricEntry(fabricType: '', price: 0.0)];
-    _draftCustomerName = '';
-    _draftVoiceNoteBase64 = null;
+    await clearActiveDraft();
     AudioService.playSend();
     notifyListeners();
   }
@@ -203,12 +250,14 @@ class OrderProvider extends ChangeNotifier {
   void setVoiceNoteBase64(String? base64) {
     _draftVoiceNoteBase64 = base64;
     notifyListeners();
+    _saveActiveDraftToPrefs();
   }
 
   set draftCustomerName(String val) {
     if (_draftCustomerName != val) {
       _draftCustomerName = val;
       notifyListeners();
+      _saveActiveDraftToPrefs();
     }
   }
 
@@ -230,6 +279,7 @@ class OrderProvider extends ChangeNotifier {
   void addFabricEntry() {
     _fabricEntries.add(FabricEntry(fabricType: '', price: 0.0));
     notifyListeners();
+    _saveActiveDraftToPrefs();
   }
 
   // ─── Remove a fabric entry ────────────────────────────────────
@@ -239,6 +289,7 @@ class OrderProvider extends ChangeNotifier {
       _lastRemovedEntryIndex = index;
       _fabricEntries.removeAt(index);
       notifyListeners();
+      _saveActiveDraftToPrefs();
     }
   }
 
@@ -266,6 +317,7 @@ class OrderProvider extends ChangeNotifier {
         _fabricEntries[index].price = price;
       }
       notifyListeners();
+      _saveActiveDraftToPrefs();
     }
   }
 
@@ -289,6 +341,7 @@ class OrderProvider extends ChangeNotifier {
       }
 
       notifyListeners();
+      _saveActiveDraftToPrefs();
     }
   }
 
@@ -297,6 +350,7 @@ class OrderProvider extends ChangeNotifier {
     if (entryIndex < _fabricEntries.length) {
       _fabricEntries[entryIndex].removeLength(length);
       notifyListeners();
+      _saveActiveDraftToPrefs();
     }
   }
 
@@ -404,9 +458,7 @@ class OrderProvider extends ChangeNotifier {
       }
 
       // Reset the form
-      _fabricEntries = [FabricEntry(fabricType: '', price: 0.0)];
-      _draftCustomerName = '';
-      _draftVoiceNoteBase64 = null;
+      await clearActiveDraft();
       _error = null;
       AudioService.playSend();
       return true;

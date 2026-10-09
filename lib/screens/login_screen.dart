@@ -421,7 +421,7 @@ class _LoginScreenState extends State<LoginScreen>
                     decoration: InputDecoration(
                       labelText: context.tr('shop_code_label'),
                       hintText: 'SHOP-XXXX',
-                      prefixIcon: Icon(Icons.qr_code_rounded, color: AppTheme.accentAmber),
+                      prefixIcon: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber),
                     ),
                   ),
                 ],
@@ -829,7 +829,7 @@ class _LoginScreenState extends State<LoginScreen>
                                                 labelText: context.tr('shop_code_label'),
                                                 hintText: 'SHOP-XXXX',
                                                 prefixIcon: Icon(
-                                                  Icons.qr_code_rounded,
+                                                  Icons.storefront_rounded,
                                                   color: AppTheme.accentAmber,
                                                 ),
                                               ),
@@ -1192,7 +1192,7 @@ class _LoginScreenState extends State<LoginScreen>
                           borderRadius: BorderRadius.circular(12),
                           border: Border.all(color: AppTheme.borderSubtle),
                         ),
-                        child: Icon(Icons.qr_code_rounded, color: AppTheme.accentAmber, size: 24),
+                        child: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber, size: 24),
                       ),
                       const SizedBox(width: 14),
                       Expanded(

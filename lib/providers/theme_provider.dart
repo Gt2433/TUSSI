@@ -3,10 +3,11 @@ import 'package:flutter/material.dart';
 import 'package:shared_preferences/shared_preferences.dart';
 import '../theme/app_theme.dart';
 
-/// Provider managing the theme mode (light vs dark) for the application.
-/// Supports a custom time-based smart scheduler for automatic theme transitions.
+/// Provider managing the theme mode and active preset for the application.
+/// Supports 5 curated theme presets and a custom time-based smart scheduler.
 class ThemeProvider extends ChangeNotifier {
   ThemeMode _themeMode = ThemeMode.dark;
+  String _currentPresetId = 'dark_obsidian';
   bool _useSmartTheme = false;
   TimeOfDay _lightStartTime = const TimeOfDay(hour: 6, minute: 0);
   TimeOfDay _darkStartTime = const TimeOfDay(hour: 18, minute: 0);
@@ -20,30 +21,55 @@ class ThemeProvider extends ChangeNotifier {
     if (_useSmartTheme) {
       return _calculateSmartIsDark() ? ThemeMode.dark : ThemeMode.light;
     }
-    return _themeMode;
+    return AppTheme.isDark ? ThemeMode.dark : ThemeMode.light;
   }
+
+  String get currentPresetId => _currentPresetId;
 
   bool get isDarkMode {
     if (_useSmartTheme) {
       return _calculateSmartIsDark();
     }
-    return _themeMode == ThemeMode.dark;
+    return AppTheme.isDark;
   }
 
   bool get useSmartTheme => _useSmartTheme;
   TimeOfDay get lightStartTime => _lightStartTime;
   TimeOfDay get darkStartTime => _darkStartTime;
 
-  void toggleTheme(bool isDark) {
+  void setPresetTheme(String presetId) {
     if (_useSmartTheme) {
-      // Disabling smart theme if manually toggled
       _useSmartTheme = false;
       _saveBoolToPrefs('use_smart_theme', false);
     }
-    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
-    AppTheme.isDark = isDark;
-    _saveBoolToPrefs('is_dark_theme', isDark);
+    _currentPresetId = presetId;
+    AppTheme.setPreset(presetId);
+    _themeMode = AppTheme.isDark ? ThemeMode.dark : ThemeMode.light;
+    _saveStringToPrefs('app_theme_preset', presetId);
     notifyListeners();
+  }
+
+  void setCustomTheme({required Color primaryColor, required bool isDark}) {
+    if (_useSmartTheme) {
+      _useSmartTheme = false;
+      _saveBoolToPrefs('use_smart_theme', false);
+    }
+    _currentPresetId = 'custom';
+    AppTheme.presets['custom'] = AppTheme.createCustomPreset(
+      primaryColor: primaryColor,
+      isDark: isDark,
+    );
+    AppTheme.activePreset = AppTheme.presets['custom']!;
+    _themeMode = isDark ? ThemeMode.dark : ThemeMode.light;
+
+    _saveStringToPrefs('app_theme_preset', 'custom');
+    _saveIntToPrefs('custom_primary_color', primaryColor.toARGB32());
+    _saveBoolToPrefs('custom_is_dark', isDark);
+    notifyListeners();
+  }
+
+  void toggleTheme(bool isDark) {
+    setPresetTheme(isDark ? 'dark_obsidian' : 'silver_light');
   }
 
   void setUseSmartTheme(bool value) {
@@ -83,10 +109,8 @@ class ThemeProvider extends ChangeNotifier {
     final darkMinutes = _darkStartTime.hour * 60 + _darkStartTime.minute;
 
     if (darkMinutes > lightMinutes) {
-      // Light mode during the day: e.g. 06:00 to 18:00
       return currentMinutes < lightMinutes || currentMinutes >= darkMinutes;
     } else {
-      // Light mode overnight: e.g. 18:00 to 06:00
       return currentMinutes >= darkMinutes && currentMinutes < lightMinutes;
     }
   }
@@ -109,9 +133,19 @@ class ThemeProvider extends ChangeNotifier {
       final prefs = await SharedPreferences.getInstance();
       
       _useSmartTheme = prefs.getBool('use_smart_theme') ?? false;
+      _currentPresetId = prefs.getString('app_theme_preset') ?? 'dark_obsidian';
       
-      final isDarkTheme = prefs.getBool('is_dark_theme') ?? true;
-      _themeMode = isDarkTheme ? ThemeMode.dark : ThemeMode.light;
+      if (_currentPresetId == 'custom') {
+        final customColorVal = prefs.getInt('custom_primary_color') ?? 0xFFD4D4D4;
+        final customIsDark = prefs.getBool('custom_is_dark') ?? true;
+        AppTheme.presets['custom'] = AppTheme.createCustomPreset(
+          primaryColor: Color(customColorVal),
+          isDark: customIsDark,
+        );
+      }
+      AppTheme.setPreset(_currentPresetId);
+
+      _themeMode = AppTheme.isDark ? ThemeMode.dark : ThemeMode.light;
 
       final lightHour = prefs.getInt('light_start_hour') ?? 6;
       final lightMinute = prefs.getInt('light_start_minute') ?? 0;
@@ -121,8 +155,6 @@ class ThemeProvider extends ChangeNotifier {
       final darkMinute = prefs.getInt('dark_start_minute') ?? 0;
       _darkStartTime = TimeOfDay(hour: darkHour, minute: darkMinute);
 
-      AppTheme.isDark = isDarkMode;
-      
       if (_useSmartTheme) {
         _startTimer();
       }
@@ -136,6 +168,20 @@ class ThemeProvider extends ChangeNotifier {
     try {
       final prefs = await SharedPreferences.getInstance();
       await prefs.setBool(key, value);
+    } catch (_) {}
+  }
+
+  Future<void> _saveStringToPrefs(String key, String value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setString(key, value);
+    } catch (_) {}
+  }
+
+  Future<void> _saveIntToPrefs(String key, int value) async {
+    try {
+      final prefs = await SharedPreferences.getInstance();
+      await prefs.setInt(key, value);
     } catch (_) {}
   }
 

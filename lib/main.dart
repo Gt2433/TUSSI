@@ -86,7 +86,7 @@ class TussiApp extends StatelessWidget {
       child: Consumer<ThemeProvider>(
         builder: (context, themeProvider, child) {
           return MaterialApp(
-            title: 'tussi',
+            title: 'TUSSI',
             navigatorKey: appNavigatorKey,
             debugShowCheckedModeBanner: false,
             themeMode: themeProvider.themeMode,

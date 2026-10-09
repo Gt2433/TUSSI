@@ -89,6 +89,22 @@ class FirestoreService {
     }
   }
 
+  /// Update the unit of a fabric type for a specific shop
+  Future<void> updateFabricUnit(String fabricName, String newUnit, String shopId) async {
+    final docs = await _firestore
+        .collection('fabric_types')
+        .where('shopId', isEqualTo: shopId)
+        .get();
+        
+    final targetName = fabricName.trim().toLowerCase();
+    for (final doc in docs.docs) {
+      final docName = (doc.data()['name'] as String? ?? '').trim().toLowerCase();
+      if (docName == targetName) {
+        await doc.reference.update({'unit': newUnit});
+      }
+    }
+  }
+
   // ─── Payment Tracking ──────────────────────────────────────────
 
   /// Update payment info on an existing order document.
@@ -399,14 +415,45 @@ class FirestoreService {
           final list = snap.docs
               .map((d) => Order.fromMap(d.data(), d.id))
               .toList();
-          list.sort((a, b) {
-            final aTime = a.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-            final bTime = b.completedAt ?? DateTime.fromMillisecondsSinceEpoch(0);
-            return bTime.compareTo(aTime);
-          });
+          list.sort((a, b) => b.createdAt.compareTo(a.createdAt));
           return list;
         });
   }
+
+  /// Stream sales statistics for each fabric type in a shop.
+  /// Counts +1 every time an order containing the fabric is sent (not draft).
+  Stream<Map<String, int>> streamFabricSalesStats(String shopId) {
+    if (shopId.isEmpty) {
+      return Stream.value({});
+    }
+    return _firestore
+        .collection('orders')
+        .where('shopId', isEqualTo: shopId)
+        .snapshots()
+        .map((snap) {
+          final Map<String, int> counts = {};
+          for (final doc in snap.docs) {
+            final data = doc.data();
+            if (data['isDraft'] == true) continue;
+
+            final List<dynamic> fabricsList = data['fabrics'] as List<dynamic>? ?? [];
+            final Set<String> countedInThisOrder = {};
+            for (final f in fabricsList) {
+              if (f is Map<String, dynamic>) {
+                final fabricType = (f['fabricType'] as String? ?? '').trim();
+                if (fabricType.isNotEmpty) {
+                  countedInThisOrder.add(fabricType);
+                }
+              }
+            }
+            for (final fName in countedInThisOrder) {
+              counts[fName] = (counts[fName] ?? 0) + 1;
+            }
+          }
+          return counts;
+        });
+  }
+
 
   /// Clean up orders older than 30 days (client-side TTL fallback)
   Future<int> cleanupExpiredOrders() async {
@@ -465,6 +512,148 @@ class FirestoreService {
   /// Delete a single order from the database
   Future<void> deleteOrder(String orderId) async {
     await _firestore.collection('orders').doc(orderId).delete();
+  }
+
+  /// Merge two orders together: combines fabrics, quantities, lengths, stores mergedHistory, and deletes sourceOrder
+  Future<void> mergeOrders(Order targetOrder, Order sourceOrder) async {
+    final List<FabricEntry> mergedFabrics = targetOrder.fabrics.map((f) {
+      return FabricEntry(
+        fabricType: f.fabricType,
+        unit: f.unit,
+        price: f.price,
+        lengths: Map<String, int>.from(f.lengths),
+        sequence: List<double>.from(f.sequence),
+      );
+    }).toList();
+
+    for (final srcFabric in sourceOrder.fabrics) {
+      final existingIndex = mergedFabrics.indexWhere(
+        (f) => f.fabricType.trim().toLowerCase() == srcFabric.fabricType.trim().toLowerCase(),
+      );
+
+      if (existingIndex != -1) {
+        final existing = mergedFabrics[existingIndex];
+        srcFabric.lengths.forEach((lengthStr, count) {
+          existing.lengths[lengthStr] = (existing.lengths[lengthStr] ?? 0) + count;
+        });
+        existing.sequence.addAll(srcFabric.sequence);
+      } else {
+        mergedFabrics.add(FabricEntry(
+          fabricType: srcFabric.fabricType,
+          unit: srcFabric.unit,
+          price: srcFabric.price,
+          lengths: Map<String, int>.from(srcFabric.lengths),
+          sequence: List<double>.from(srcFabric.sequence),
+        ));
+      }
+    }
+
+    String mergedCustomerName = targetOrder.customerName ?? '';
+    final srcCustomerName = sourceOrder.customerName ?? '';
+    if ((mergedCustomerName.isEmpty || mergedCustomerName == 'Achat') &&
+        srcCustomerName.isNotEmpty &&
+        srcCustomerName != 'Achat') {
+      mergedCustomerName = srcCustomerName;
+    } else if (mergedCustomerName.isNotEmpty &&
+        srcCustomerName.isNotEmpty &&
+        mergedCustomerName != srcCustomerName &&
+        srcCustomerName != 'Achat') {
+      mergedCustomerName = '$mergedCustomerName + $srcCustomerName';
+    }
+
+    final List<Map<String, dynamic>> history = [];
+    if (targetOrder.mergedHistory != null && targetOrder.mergedHistory!.isNotEmpty) {
+      history.addAll(targetOrder.mergedHistory!);
+    } else {
+      history.add({
+        'customerName': targetOrder.customerName ?? '',
+        'fabrics': targetOrder.fabrics.map((f) => f.toMap()).toList(),
+        'voiceNoteBase64': targetOrder.voiceNoteBase64,
+      });
+    }
+
+    if (sourceOrder.mergedHistory != null && sourceOrder.mergedHistory!.isNotEmpty) {
+      history.addAll(sourceOrder.mergedHistory!);
+    } else {
+      history.add({
+        'customerName': sourceOrder.customerName ?? '',
+        'fabrics': sourceOrder.fabrics.map((f) => f.toMap()).toList(),
+        'voiceNoteBase64': sourceOrder.voiceNoteBase64,
+      });
+    }
+
+    final mergedVoiceNote = (targetOrder.voiceNoteBase64 != null && targetOrder.voiceNoteBase64!.isNotEmpty)
+        ? targetOrder.voiceNoteBase64
+        : sourceOrder.voiceNoteBase64;
+
+    await _firestore.collection('orders').doc(targetOrder.id).update({
+      'customerName': mergedCustomerName,
+      'fabrics': mergedFabrics.map((f) => f.toMap()).toList(),
+      'mergedHistory': history,
+      if (mergedVoiceNote != null) 'voiceNoteBase64': mergedVoiceNote,
+    });
+
+    await deleteOrderGroup(sourceOrder);
+  }
+
+  /// Separate (unmerge) a merged order back into its constituent orders
+  Future<void> unmergeOrder(Order mergedOrder) async {
+    final batch = _firestore.batch();
+
+    if (mergedOrder.mergedHistory != null && mergedOrder.mergedHistory!.isNotEmpty) {
+      for (final item in mergedOrder.mergedHistory!) {
+        final newDocRef = _firestore.collection('orders').doc();
+        final custName = item['customerName'] as String? ?? '';
+        final rawFabrics = (item['fabrics'] as List<dynamic>? ?? []);
+        final voiceNote = item['voiceNoteBase64'] as String?;
+
+        batch.set(newDocRef, {
+          'senderId': mergedOrder.senderId,
+          'senderName': mergedOrder.senderName,
+          'receiverId': mergedOrder.receiverId,
+          'receiverName': mergedOrder.receiverName,
+          'customerName': custName,
+          'fabrics': rawFabrics,
+          'createdAt': FieldValue.serverTimestamp(),
+          'status': mergedOrder.status,
+          'isDraft': mergedOrder.isDraft,
+          if (voiceNote != null) 'voiceNoteBase64': voiceNote,
+          if (mergedOrder.broadcastGroupId != null) 'broadcastGroupId': mergedOrder.broadcastGroupId,
+          if (mergedOrder.shopId != null) 'shopId': mergedOrder.shopId,
+          'paymentStatus': 'unpaid',
+        });
+      }
+    } else {
+      final names = (mergedOrder.customerName ?? '').split('+').map((n) => n.trim()).where((n) => n.isNotEmpty).toList();
+      final nameList = names.isEmpty ? ['طلب 1', 'طلب 2'] : names;
+
+      for (int i = 0; i < nameList.length; i++) {
+        final custName = nameList[i];
+        final assignedFabrics = mergedOrder.fabrics.length >= nameList.length
+            ? [mergedOrder.fabrics[i % mergedOrder.fabrics.length]]
+            : mergedOrder.fabrics;
+
+        final newDocRef = _firestore.collection('orders').doc();
+        batch.set(newDocRef, {
+          'senderId': mergedOrder.senderId,
+          'senderName': mergedOrder.senderName,
+          'receiverId': mergedOrder.receiverId,
+          'receiverName': mergedOrder.receiverName,
+          'customerName': custName,
+          'fabrics': assignedFabrics.map((f) => f.toMap()).toList(),
+          'createdAt': FieldValue.serverTimestamp(),
+          'status': mergedOrder.status,
+          'isDraft': mergedOrder.isDraft,
+          if (mergedOrder.voiceNoteBase64 != null) 'voiceNoteBase64': mergedOrder.voiceNoteBase64,
+          if (mergedOrder.broadcastGroupId != null) 'broadcastGroupId': mergedOrder.broadcastGroupId,
+          if (mergedOrder.shopId != null) 'shopId': mergedOrder.shopId,
+          'paymentStatus': 'unpaid',
+        });
+      }
+    }
+
+    batch.delete(_firestore.collection('orders').doc(mergedOrder.id));
+    await batch.commit();
   }
 
   /// Clear all completed orders in order history

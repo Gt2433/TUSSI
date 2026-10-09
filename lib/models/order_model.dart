@@ -168,6 +168,8 @@ class Order {
   final double? paidAmount;
   /// 'unpaid' | 'partial' | 'paid'
   final String paymentStatus;
+  /// History of constituent orders if this order was merged
+  final List<Map<String, dynamic>>? mergedHistory;
 
   Order({
     required this.id,
@@ -188,6 +190,7 @@ class Order {
     this.finalPrice,
     this.paidAmount,
     this.paymentStatus = 'unpaid',
+    this.mergedHistory,
   });
 
   /// Computed total price: uses finalPrice if set, else sums fabric costs.
@@ -228,6 +231,9 @@ class Order {
       finalPrice: (map['finalPrice'] as num?)?.toDouble(),
       paidAmount: (map['paidAmount'] as num?)?.toDouble(),
       paymentStatus: map['paymentStatus'] ?? 'unpaid',
+      mergedHistory: (map['mergedHistory'] as List<dynamic>?)
+          ?.map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
     );
   }
 
@@ -250,6 +256,7 @@ class Order {
       if (finalPrice != null) 'finalPrice': finalPrice,
       if (paidAmount != null) 'paidAmount': paidAmount,
       'paymentStatus': paymentStatus,
+      if (mergedHistory != null) 'mergedHistory': mergedHistory,
     };
   }
 
@@ -273,6 +280,7 @@ class Order {
       'finalPrice': finalPrice,
       'paidAmount': paidAmount,
       'paymentStatus': paymentStatus,
+      'mergedHistory': mergedHistory,
     };
   }
 
@@ -306,6 +314,9 @@ class Order {
       finalPrice: (map['finalPrice'] as num?)?.toDouble(),
       paidAmount: (map['paidAmount'] as num?)?.toDouble(),
       paymentStatus: map['paymentStatus'] ?? 'unpaid',
+      mergedHistory: (map['mergedHistory'] as List<dynamic>?)
+          ?.map((e) => Map<String, dynamic>.from(e as Map))
+          .toList(),
     );
   }
 }

@@ -1,5 +1,6 @@
 import 'package:flutter/material.dart';
 import 'dart:async';
+import 'package:provider/provider.dart';
 import '../models/order_model.dart';
 import '../theme/app_theme.dart';
 import 'package:intl/intl.dart';
@@ -7,8 +8,9 @@ import 'dart:convert';
 import 'dart:typed_data';
 import 'package:audioplayers/audioplayers.dart';
 import '../providers/language_provider.dart';
+import '../providers/auth_provider.dart' as app_auth;
+import '../services/firestore_service.dart';
 import '../utils/payment_dialog.dart';
-import '../utils/order_share_helper.dart';
 
 /// Card widget displaying a complete order with fabric entries,
 /// lengths, multipliers, and an optional action button.
@@ -149,17 +151,6 @@ class OrderCard extends StatelessWidget {
                           children: [
                             _StatusBadge(status: order.status),
                             const Spacer(),
-                            // Share button
-                            IconButton(
-                              icon: Icon(Icons.share_rounded, color: AppTheme.accentAmber, size: 18),
-                              tooltip: 'مشاركة / تصدير',
-                              onPressed: () => OrderShareHelper.showShareModal(context, order),
-                              style: IconButton.styleFrom(
-                                backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.1),
-                                padding: const EdgeInsets.all(4),
-                                minimumSize: const Size(32, 32),
-                              ),
-                            ),
                             if (onRestore != null) ...[
                               const SizedBox(width: 6),
                               IconButton(
@@ -192,17 +183,6 @@ class OrderCard extends StatelessWidget {
                     ],
                   ),
                 ),
-                // Share button (non-history mode only)
-                if (!showStatus)
-                  IconButton(
-                    icon: Icon(Icons.share_rounded, color: AppTheme.accentAmber, size: 20),
-                    tooltip: 'مشاركة / تصدير (Share / Export)',
-                    onPressed: () => OrderShareHelper.showShareModal(context, order),
-                    style: IconButton.styleFrom(
-                      backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.1),
-                      padding: const EdgeInsets.all(4),
-                    ),
-                  ),
               ],
             ),
 
@@ -345,11 +325,40 @@ class OrderCard extends StatelessWidget {
               ],
             ],
 
-            // ─── Done/Resume/Recall Buttons ─────────────────────
+            // ─── Done/Resume/Recall/Merge Buttons ─────────────────────
             if (showDoneButton || onResume != null) ...[
               const SizedBox(height: 16),
               Row(
                 children: [
+                  if (!showStatus && order.status == 'pending') ...[
+                    IconButton(
+                      icon: const Icon(Icons.merge_type_rounded, size: 20),
+                      color: AppTheme.accentAmber,
+                      tooltip: 'دمج مع طلبية أخرى',
+                      style: IconButton.styleFrom(
+                        backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.15),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                        padding: const EdgeInsets.all(10),
+                      ),
+                      onPressed: () => _showMergeDialog(context, order),
+                    ),
+                    if ((order.mergedHistory != null && order.mergedHistory!.isNotEmpty) ||
+                        (order.customerName ?? '').contains('+')) ...[
+                      const SizedBox(width: 8),
+                      IconButton(
+                        icon: const Icon(Icons.call_split_rounded, size: 20),
+                        color: Colors.orange,
+                        tooltip: 'تفكيك الطلبية عن اختها',
+                        style: IconButton.styleFrom(
+                          backgroundColor: Colors.orange.withValues(alpha: 0.15),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.all(10),
+                        ),
+                        onPressed: () => _showUnmergeDialog(context, order),
+                      ),
+                    ],
+                    const SizedBox(width: 8),
+                  ],
                   if (isSent && onResume != null) ...[
                     Expanded(
                       child: ElevatedButton.icon(
@@ -523,6 +532,241 @@ class _PaymentStatusBar extends StatelessWidget {
   }
 }
 
+void _showMergeDialog(BuildContext context, Order currentOrder) {
+  final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
+    final firestoreService = FirestoreService();
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        return StreamBuilder<List<Order>>(
+          stream: firestoreService.streamOrdersForReceiver(authProvider.user!.uid),
+          builder: (context, snapshot) {
+            final orders = (snapshot.data ?? [])
+                .where((o) => o.id != currentOrder.id && o.status == 'pending')
+                .toList();
+
+            return Padding(
+              padding: EdgeInsets.only(
+                left: 20,
+                right: 20,
+                top: 20,
+                bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+              ),
+              child: Column(
+                mainAxisSize: MainAxisSize.min,
+                crossAxisAlignment: CrossAxisAlignment.start,
+                children: [
+                  Row(
+                    mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                    children: [
+                      Text(
+                        isAr ? 'دمج مع طلبية أخرى' : 'Merge with another order',
+                        style: const TextStyle(
+                          fontSize: 18,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                      IconButton(
+                        icon: const Icon(Icons.close_rounded),
+                        onPressed: () => Navigator.of(context).pop(),
+                      ),
+                    ],
+                  ),
+                  const SizedBox(height: 12),
+                  Text(
+                    isAr
+                        ? 'اختر الطلبية التي تود دمج محتوياتها وأقماشها مع هذه الطلبية:'
+                        : 'Select an order to merge into this order:',
+                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+                  ),
+                  const SizedBox(height: 16),
+                  ConstrainedBox(
+                    constraints: BoxConstraints(
+                      maxHeight: MediaQuery.of(context).size.height * 0.45,
+                    ),
+                    child: orders.isEmpty
+                        ? Padding(
+                            padding: const EdgeInsets.all(24),
+                            child: Center(
+                              child: Text(
+                                isAr ? 'لا توجد طلبات معلقة أخرى للدمج' : 'No other pending orders to merge',
+                                style: TextStyle(color: AppTheme.textMuted),
+                              ),
+                            ),
+                          )
+                        : ListView.separated(
+                            shrinkWrap: true,
+                            itemCount: orders.length,
+                            separatorBuilder: (context, index) => const Divider(height: 1),
+                            itemBuilder: (context, idx) {
+                              final srcOrder = orders[idx];
+                              final fabCount = srcOrder.fabrics.length;
+                              final custName = srcOrder.customerName ?? (isAr ? 'بدون اسم' : 'No customer');
+
+                              return ListTile(
+                                contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                leading: CircleAvatar(
+                                  backgroundColor: AppTheme.accentAmber.withValues(alpha: 0.2),
+                                  child: Icon(Icons.merge_type_rounded, color: AppTheme.accentAmber, size: 20),
+                                ),
+                                title: Text(
+                                  'الزبون: $custName',
+                                  style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold),
+                                ),
+                                subtitle: Text(
+                                  'من: ${srcOrder.senderName} • $fabCount نوع أقمشة',
+                                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                                ),
+                                trailing: ElevatedButton(
+                                  style: ElevatedButton.styleFrom(
+                                    backgroundColor: AppTheme.accentAmber,
+                                    foregroundColor: AppTheme.surfaceDark,
+                                  ),
+                                  onPressed: () async {
+                                    final confirm = await showDialog<bool>(
+                                      context: context,
+                                      builder: (dialogCtx) => AlertDialog(
+                                        title: Text(isAr ? 'تأكيد الدمج' : 'Confirm Merge'),
+                                        content: Text(
+                                          isAr
+                                              ? 'هل تود دمج طلبية "$custName" مع هذه الطلبية؟ سيتم جمع الكميات والأقمشة معاً.'
+                                              : 'Merge "$custName" order into this order?',
+                                        ),
+                                        actions: [
+                                          TextButton(
+                                            onPressed: () => Navigator.of(dialogCtx).pop(false),
+                                            child: Text(isAr ? 'إلغاء' : 'Cancel'),
+                                          ),
+                                          ElevatedButton(
+                                            onPressed: () => Navigator.of(dialogCtx).pop(true),
+                                            style: ElevatedButton.styleFrom(
+                                              backgroundColor: AppTheme.accentAmber,
+                                              foregroundColor: AppTheme.surfaceDark,
+                                            ),
+                                            child: Text(isAr ? 'دمج الآن' : 'Merge Now'),
+                                          ),
+                                        ],
+                                      ),
+                                    );
+                                    if (confirm == true) {
+                                      final messenger = ScaffoldMessenger.of(context);
+                                      Navigator.of(ctx).pop();
+                                      await firestoreService.mergeOrders(currentOrder, srcOrder);
+                                      messenger.showSnackBar(
+                                        SnackBar(
+                                          content: Text(isAr ? 'تم دمج الطلبيتين بنجاح ✓' : 'Orders merged successfully ✓'),
+                                          backgroundColor: AppTheme.successSurface,
+                                        ),
+                                      );
+                                    }
+                                  },
+                                  child: Text(isAr ? 'دمج' : 'Merge'),
+                                ),
+                              );
+                            },
+                          ),
+                  ),
+                ],
+              ),
+            );
+          },
+        );
+      },
+    );
+  }
+
+void _showUnmergeDialog(BuildContext context, Order currentOrder) {
+  final firestoreService = FirestoreService();
+  final isAr = context.tr('tab_orders') == 'الطلبيات';
+
+  List<String> customerNames = [];
+  if (currentOrder.mergedHistory != null && currentOrder.mergedHistory!.isNotEmpty) {
+    customerNames = currentOrder.mergedHistory!
+        .map((h) => (h['customerName'] as String? ?? '').trim())
+        .where((name) => name.isNotEmpty)
+        .toList();
+  } else {
+    customerNames = (currentOrder.customerName ?? '')
+        .split('+')
+        .map((n) => n.trim())
+        .where((n) => n.isNotEmpty)
+        .toList();
+  }
+
+  showDialog(
+    context: context,
+    builder: (ctx) => AlertDialog(
+      backgroundColor: AppTheme.surfaceDark,
+      title: Row(
+        children: [
+          const Icon(Icons.call_split_rounded, color: Colors.orange),
+          const SizedBox(width: 8),
+          Text(isAr ? 'تفكيك الطلبية' : 'Unmerge Order'),
+        ],
+      ),
+      content: Column(
+        mainAxisSize: MainAxisSize.min,
+        crossAxisAlignment: CrossAxisAlignment.start,
+        children: [
+          Text(
+            isAr
+                ? 'هل ترغب في تفكيك هذه الطلبية المدمجة وإعادتها كطلبيات منفصلة لكل زبون؟'
+                : 'Do you want to split this merged order back into separate orders for each customer?',
+            style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
+          ),
+          const SizedBox(height: 12),
+          Text(
+            isAr ? 'الطلبيات الناتجة:' : 'Resulting Orders:',
+            style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.bold, fontSize: 13),
+          ),
+          const SizedBox(height: 6),
+          ...customerNames.map((name) => Padding(
+            padding: const EdgeInsets.only(bottom: 4),
+            child: Row(
+              children: [
+                Icon(Icons.person_rounded, size: 16, color: AppTheme.accentAmber),
+                const SizedBox(width: 6),
+                Text('طلب الزبون: $name', style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600)),
+              ],
+            ),
+          )),
+        ],
+      ),
+      actions: [
+        TextButton(
+          onPressed: () => Navigator.of(ctx).pop(),
+          child: Text(isAr ? 'إلغاء' : 'Cancel'),
+        ),
+        ElevatedButton(
+          style: ElevatedButton.styleFrom(
+            backgroundColor: Colors.orange,
+            foregroundColor: Colors.white,
+          ),
+          onPressed: () async {
+            final messenger = ScaffoldMessenger.of(context);
+            Navigator.of(ctx).pop();
+            await firestoreService.unmergeOrder(currentOrder);
+            messenger.showSnackBar(
+              SnackBar(
+                content: Text(isAr ? 'تم تفكيك الطلبية وإعادة فصلها بنجاح ✓' : 'Orders separated successfully ✓'),
+                backgroundColor: AppTheme.successSurface,
+              ),
+            );
+          },
+          child: Text(isAr ? 'تفكيك الآن' : 'Unmerge Now'),
+        ),
+      ],
+    ),
+  );
+}
+
 class _FabricSection extends StatelessWidget {
   final FabricEntry fabric;
   final int index;
@@ -593,25 +837,25 @@ class _FabricSection extends StatelessWidget {
                   Text(
                     textToDisplay,
                     style: TextStyle(
-                      fontSize: 15,
-                      fontWeight: FontWeight.w600,
+                      fontSize: 18,
+                      fontWeight: FontWeight.bold,
                       color: AppTheme.textPrimary,
                     ),
                   ),
                   if (multiplier > 1) ...[
-                    const SizedBox(width: 6),
+                    const SizedBox(width: 8),
                     Container(
                       padding:
-                          const EdgeInsets.symmetric(horizontal: 7, vertical: 2),
+                          const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                       decoration: BoxDecoration(
                         color: AppTheme.accentAmber,
-                        borderRadius: BorderRadius.circular(6),
+                        borderRadius: BorderRadius.circular(8),
                       ),
                       child: Text(
                         '×$multiplier',
                         style: TextStyle(
-                          fontSize: 11,
-                          fontWeight: FontWeight.w700,
+                          fontSize: 16,
+                          fontWeight: FontWeight.w900,
                           color: AppTheme.surfaceDark,
                         ),
                       ),
@@ -634,10 +878,10 @@ class _FabricSection extends StatelessWidget {
             final unitText = fabric.unit == 'kg' ? 'كغ' : (fabric.unit == 'yard' ? 'يارد' : 'متر');
 
             return Container(
-              padding: const EdgeInsets.all(10),
+              padding: const EdgeInsets.all(12),
               decoration: BoxDecoration(
                 color: AppTheme.surfaceElevated.withValues(alpha: 0.5),
-                borderRadius: BorderRadius.circular(8),
+                borderRadius: BorderRadius.circular(10),
                 border: Border.all(color: AppTheme.borderSubtle.withValues(alpha: 0.5)),
               ),
               child: Row(
@@ -648,71 +892,71 @@ class _FabricSection extends StatelessWidget {
                       children: [
                         const Text(
                           'السعر الفردي',
-                          style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.w500),
+                          style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
                             '$formattedUnitPrice د.ج/$unitText',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Container(width: 1, height: 16, color: AppTheme.borderSubtle.withValues(alpha: 0.5)),
+                  Container(width: 1, height: 20, color: AppTheme.borderSubtle.withValues(alpha: 0.5)),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const Text(
                           'الأسطوانات',
-                          style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.w500),
+                          style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         Text(
                           '$fabricCylinders',
-                          style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                          style: TextStyle(fontSize: 14, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                         ),
                       ],
                     ),
                   ),
-                  Container(width: 1, height: 16, color: AppTheme.borderSubtle.withValues(alpha: 0.5)),
+                  Container(width: 1, height: 20, color: AppTheme.borderSubtle.withValues(alpha: 0.5)),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const Text(
                           'الكمية',
-                          style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.w500),
+                          style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
                             '${fabricQty.toStringAsFixed(1).replaceAll(RegExp(r'\.0$'), '')} ${fabric.unit == 'kg' ? 'kg' : (fabric.unit == 'yard' ? 'yd' : 'm')}',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.w600, color: AppTheme.textPrimary),
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
                           ),
                         ),
                       ],
                     ),
                   ),
-                  Container(width: 1, height: 16, color: AppTheme.borderSubtle.withValues(alpha: 0.5)),
+                  Container(width: 1, height: 20, color: AppTheme.borderSubtle.withValues(alpha: 0.5)),
                   Expanded(
                     child: Column(
                       crossAxisAlignment: CrossAxisAlignment.center,
                       children: [
                         const Text(
                           'السعر الإجمالي',
-                          style: TextStyle(fontSize: 9, color: Colors.grey, fontWeight: FontWeight.w500),
+                          style: TextStyle(fontSize: 10, color: Colors.grey, fontWeight: FontWeight.w500),
                         ),
-                        const SizedBox(height: 2),
+                        const SizedBox(height: 3),
                         FittedBox(
                           fit: BoxFit.scaleDown,
                           child: Text(
                             '$formattedPrice د.ج',
-                            style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: AppTheme.accentAmber),
+                            style: TextStyle(fontSize: 13, fontWeight: FontWeight.w900, color: AppTheme.accentAmber),
                           ),
                         ),
                       ],

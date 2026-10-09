@@ -345,7 +345,51 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                       });
                     },
                   ),
-                  const SizedBox(height: 16),
+                  const SizedBox(height: 12),
+                  // Quick "Add New Fabric" banner button
+                  InkWell(
+                    onTap: () {
+                      Navigator.of(ctx).pop();
+                      _AddFabricTypeButton.showAddDialog(
+                        context,
+                        firestoreService: _firestoreService,
+                        entryIndex: widget.entryIndex,
+                        priceController: _priceController,
+                        shopId: _shopId!,
+                        initialName: searchQuery,
+                      );
+                    },
+                    borderRadius: BorderRadius.circular(10),
+                    child: Container(
+                      padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentAmber.withValues(alpha: 0.12),
+                        borderRadius: BorderRadius.circular(10),
+                        border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.3)),
+                      ),
+                      child: Row(
+                        children: [
+                          Icon(Icons.add_circle_rounded, color: AppTheme.accentAmber, size: 20),
+                          const SizedBox(width: 8),
+                          Expanded(
+                            child: Text(
+                              searchQuery.trim().isNotEmpty
+                                  ? (isAr ? 'إضافة قماش جديد "$searchQuery"' : 'Add New Fabric "$searchQuery"')
+                                  : (isAr ? 'إضافة قماش جديد غير موجود في القائمة' : 'Add New Fabric to List'),
+                              style: TextStyle(
+                                color: AppTheme.accentAmber,
+                                fontWeight: FontWeight.bold,
+                                fontSize: 13,
+                              ),
+                              overflow: TextOverflow.ellipsis,
+                            ),
+                          ),
+                          Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.accentAmber, size: 12),
+                        ],
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 12),
                   ConstrainedBox(
                     constraints: BoxConstraints(
                       maxHeight: MediaQuery.of(context).size.height * 0.4,
@@ -354,9 +398,38 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                         ? Padding(
                             padding: const EdgeInsets.all(24),
                             child: Center(
-                              child: Text(
-                                isAr ? 'لم يتم العثور على أقمشة' : 'No fabrics found',
-                                style: TextStyle(color: AppTheme.textMuted),
+                              child: Column(
+                                mainAxisSize: MainAxisSize.min,
+                                children: [
+                                  Text(
+                                    isAr ? 'لم يتم العثور على أقمشة تطابق البحث' : 'No matching fabrics found',
+                                    style: TextStyle(color: AppTheme.textMuted),
+                                  ),
+                                  const SizedBox(height: 12),
+                                  ElevatedButton.icon(
+                                    onPressed: () {
+                                      Navigator.of(ctx).pop();
+                                      _AddFabricTypeButton.showAddDialog(
+                                        context,
+                                        firestoreService: _firestoreService,
+                                        entryIndex: widget.entryIndex,
+                                        priceController: _priceController,
+                                        shopId: _shopId!,
+                                        initialName: searchQuery,
+                                      );
+                                    },
+                                    icon: const Icon(Icons.add_rounded),
+                                    label: Text(
+                                      searchQuery.trim().isNotEmpty
+                                          ? (isAr ? 'إضافة قماش جديد "$searchQuery"' : 'Add New Fabric "$searchQuery"')
+                                          : (isAr ? 'إضافة قماش جديد' : 'Add New Fabric'),
+                                    ),
+                                    style: ElevatedButton.styleFrom(
+                                      backgroundColor: AppTheme.accentAmber,
+                                      foregroundColor: AppTheme.surfaceDark,
+                                    ),
+                                  ),
+                                ],
                               ),
                             ),
                           )
@@ -809,14 +882,43 @@ class _FabricEditorSheetState extends State<_FabricEditorSheet> {
                                   : e.key;
                               final displayLengthText = lengthText;
 
-                              return Text(
-                                e.value > 1
-                                    ? '$displayLengthText ×${e.value}'
-                                    : displayLengthText,
-                                style: TextStyle(
-                                  fontSize: 15,
-                                  fontWeight: FontWeight.w600,
-                                  color: AppTheme.textPrimary,
+                              return Container(
+                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                decoration: BoxDecoration(
+                                  color: AppTheme.surfaceElevated,
+                                  borderRadius: BorderRadius.circular(8),
+                                  border: Border.all(color: AppTheme.borderSubtle),
+                                ),
+                                child: Row(
+                                  mainAxisSize: MainAxisSize.min,
+                                  children: [
+                                    Text(
+                                      displayLengthText,
+                                      style: TextStyle(
+                                        fontSize: 18,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.textPrimary,
+                                      ),
+                                    ),
+                                    if (e.value > 1) ...[
+                                      const SizedBox(width: 6),
+                                      Container(
+                                        padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                                        decoration: BoxDecoration(
+                                          color: AppTheme.accentAmber,
+                                          borderRadius: BorderRadius.circular(6),
+                                        ),
+                                        child: Text(
+                                          '×${e.value}',
+                                          style: TextStyle(
+                                            fontSize: 15,
+                                            fontWeight: FontWeight.w900,
+                                            color: AppTheme.surfaceDark,
+                                          ),
+                                        ),
+                                      ),
+                                    ],
+                                  ],
                                 ),
                               );
                             }).toList(),
@@ -1140,13 +1242,26 @@ class _AddFabricTypeButton extends StatelessWidget {
         color: AppTheme.accentAmber,
         size: 28,
       ),
-      onPressed: () => _showAddDialog(context),
+      onPressed: () => showAddDialog(
+        context,
+        firestoreService: firestoreService,
+        entryIndex: entryIndex,
+        priceController: priceController,
+        shopId: shopId,
+      ),
       tooltip: context.tr('add_new_fabric_type'),
     );
   }
 
-  void _showAddDialog(BuildContext context) {
-    final dialogNameController = TextEditingController();
+  static void showAddDialog(
+    BuildContext context, {
+    required FirestoreService firestoreService,
+    required int entryIndex,
+    required TextEditingController priceController,
+    required String shopId,
+    String initialName = '',
+  }) {
+    final dialogNameController = TextEditingController(text: initialName);
     final dialogPriceController = TextEditingController();
 
     showDialog(

@@ -14,13 +14,14 @@ import '../models/order_model.dart';
 import 'super_admin_screen.dart';
 import '../models/user_model.dart';
 import 'help_guide_screen.dart';
-import 'ai_assistant_screen.dart';
+import '../services/update_service.dart';
+import '../widgets/download_progress_dialog.dart';
 
 class SettingsScreen extends StatelessWidget {
   final bool isTab;
   const SettingsScreen({super.key, this.isTab = false});
 
-  static const String _kCurrentVersion = '3.0.1';
+  static const String _kCurrentVersion = '3.0.3';
 
   // ─── Show "About App" Dialog ──────────────────────────────────
   void _showAboutDialog(BuildContext context) {
@@ -36,7 +37,7 @@ class SettingsScreen extends StatelessWidget {
           child: Column(
             mainAxisSize: MainAxisSize.min,
             children: [
-              // Logo/Icon Container (Changed from standard info icon to Application Logo)
+              // Logo/Icon Container
               Container(
                 width: 90,
                 height: 90,
@@ -63,7 +64,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ),
               ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               // App Name
               ShaderMask(
                 shaderCallback: (bounds) => AppTheme.accentGradient.createShader(bounds),
@@ -86,9 +87,50 @@ class SettingsScreen extends StatelessWidget {
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 20),
+
+              const SizedBox(height: 14),
+
+              // MBD Tagline Quote & Logo
+              Container(
+                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.surfaceDark.withOpacity(0.7),
+                  borderRadius: BorderRadius.circular(16),
+                  border: Border.all(color: AppTheme.accentAmber.withOpacity(0.35)),
+                ),
+                child: Row(
+                  mainAxisSize: MainAxisSize.min,
+                  children: [
+                    ClipRRect(
+                      borderRadius: BorderRadius.circular(8),
+                      child: Image.asset(
+                        'assets/MBD.png',
+                        height: 30,
+                        width: 30,
+                        fit: BoxFit.cover,
+                        errorBuilder: (_, __, ___) => Icon(
+                          Icons.workspace_premium_rounded,
+                          color: AppTheme.accentAmber,
+                          size: 24,
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Text(
+                      isAr ? '« من مشاريع MBD »' : '« From MBD Projects »',
+                      style: TextStyle(
+                        fontSize: 13,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.accentAmber,
+                      ),
+                    ),
+                  ],
+                ),
+              ),
+
+              const SizedBox(height: 16),
               const Divider(height: 1),
-              const SizedBox(height: 20),
+              const SizedBox(height: 16),
               // Creator & Info
               Text(
                 isAr ? 'المطور وبرمجة التطبيق' : 'Developer & Creator',
@@ -100,17 +142,18 @@ class SettingsScreen extends StatelessWidget {
               ),
               const SizedBox(height: 4),
               Text(
-                'Mohammed Bahyou (محمد باحيو)',
+                'MOHAMMED BAHAYOU',
                 style: TextStyle(
                   fontSize: 15,
                   fontWeight: FontWeight.bold,
                   color: AppTheme.textPrimary,
+                  letterSpacing: 0.5,
                 ),
                 textAlign: TextAlign.center,
               ),
-              const SizedBox(height: 12),
+              const SizedBox(height: 10),
               Text(
-                isAr ? 'الإصدار الثاني: $_kCurrentVersion' : 'Version: $_kCurrentVersion',
+                isAr ? 'الإصدار الحالي: $_kCurrentVersion' : 'Version: $_kCurrentVersion',
                 style: TextStyle(
                   fontSize: 12,
                   color: AppTheme.textSecondary,
@@ -176,8 +219,6 @@ class SettingsScreen extends StatelessWidget {
               apkUrl = data?['url'] as String? ?? apkUrl;
             }
 
-            final qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${Uri.encodeComponent(apkUrl)}';
-
             return Padding(
               padding: const EdgeInsets.all(28),
               child: Column(
@@ -193,46 +234,13 @@ class SettingsScreen extends StatelessWidget {
                   const SizedBox(height: 12),
                   Text(
                     isAr 
-                        ? 'امسح رمز الـ QR التالي لتحميل التطبيق مباشرة على أي هاتف آخر:'
-                        : 'Scan this QR Code to download the application directly to any other device:',
+                        ? 'انقر على الزر أدناه لمشاركة رابط تحميل التطبيق مباشرة:'
+                        : 'Click below to share the application download link directly:',
                     style: TextStyle(
                       fontSize: 13,
                       color: AppTheme.textSecondary,
                     ),
                     textAlign: TextAlign.center,
-                  ),
-                  const SizedBox(height: 20),
-                  Container(
-                    padding: const EdgeInsets.all(12),
-                    decoration: BoxDecoration(
-                      color: Colors.white,
-                      borderRadius: BorderRadius.circular(16),
-                    ),
-                    child: Image.network(
-                      qrUrl,
-                      width: 200,
-                      height: 200,
-                      loadingBuilder: (context, child, loadingProgress) {
-                        if (loadingProgress == null) return child;
-                        return const SizedBox(
-                          width: 200,
-                          height: 200,
-                          child: Center(
-                            child: CircularProgressIndicator(),
-                          ),
-                        );
-                      },
-                      errorBuilder: (context, error, stackTrace) => Container(
-                        width: 200,
-                        height: 200,
-                        color: AppTheme.surfaceDark,
-                        child: const Icon(
-                          Icons.qr_code_2_rounded,
-                          size: 64,
-                          color: Colors.white54,
-                        ),
-                      ),
-                    ),
                   ),
                   const SizedBox(height: 24),
                   SizedBox(
@@ -284,7 +292,6 @@ class SettingsScreen extends StatelessWidget {
   // ─── Show Shop QR Code & Join Code Modal ──────────────────────
   void _showShopQRCodeModal(BuildContext context, String shopName, String shopCode) {
     final isAr = context.tr('tab_orders') == 'الطلبيات';
-    final qrUrl = 'https://api.qrserver.com/v1/create-qr-code/?size=300x300&data=${Uri.encodeComponent(shopCode)}';
 
     showDialog(
       context: context,
@@ -358,34 +365,7 @@ class SettingsScreen extends StatelessWidget {
                   ],
                 ),
               ),
-              const SizedBox(height: 20),
-
-              // QR Code Image
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: Colors.white,
-                  borderRadius: BorderRadius.circular(16),
-                ),
-                child: Image.network(
-                  qrUrl,
-                  width: 180,
-                  height: 180,
-                  loadingBuilder: (context, child, loadingProgress) {
-                    if (loadingProgress == null) return child;
-                    return const SizedBox(
-                      width: 180, height: 180,
-                      child: Center(child: CircularProgressIndicator()),
-                    );
-                  },
-                  errorBuilder: (context, error, stackTrace) => Container(
-                    width: 180, height: 180,
-                    color: AppTheme.surfaceDark,
-                    child: const Icon(Icons.qr_code_2_rounded, size: 64, color: Colors.white54),
-                  ),
-                ),
-              ),
-              const SizedBox(height: 20),
+              const SizedBox(height: 24),
 
               // Share Button
               SizedBox(
@@ -447,19 +427,19 @@ class SettingsScreen extends StatelessWidget {
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
-            // ─── App Update Check ────────────────────────────────
-            StreamBuilder<Map<String, dynamic>?>(
-              stream: firestoreService.streamLatestAppUpdate(),
+            // ─── GitHub App Update Check ─────────────────────────────
+            FutureBuilder<AppUpdateInfo?>(
+              future: UpdateService.checkGithubUpdate(),
               builder: (context, snapshot) {
                 if (snapshot.hasData && snapshot.data != null) {
-                  final updateData = snapshot.data!;
-                  final latestVersion = updateData['version'] as String? ?? '';
-                  final updateUrl = updateData['url'] as String? ?? '';
+                  final updateInfo = snapshot.data!;
+                  final latestVersion = updateInfo.version;
+                  final updateUrl = updateInfo.url;
+                  final changelog = updateInfo.changelog;
 
                   if (!kIsWeb &&
                       latestVersion.isNotEmpty &&
-                      latestVersion != _kCurrentVersion &&
-                      auth.appUser?.email != 'hhcgjvhcnk@gmail.com') {
+                      latestVersion != _kCurrentVersion) {
                     return Container(
                       margin: const EdgeInsets.only(bottom: 24),
                       padding: const EdgeInsets.all(20),
@@ -505,7 +485,7 @@ class SettingsScreen extends StatelessWidget {
                               const SizedBox(width: 12),
                               Expanded(
                                 child: Text(
-                                  isAr ? 'تحديث جديد متوفر!' : 'New Update Available!',
+                                  isAr ? 'تحديث جديد متوفر على GitHub 🚀' : 'New Update Available on GitHub 🚀',
                                   style: const TextStyle(
                                     fontSize: 16,
                                     fontWeight: FontWeight.bold,
@@ -531,9 +511,11 @@ class SettingsScreen extends StatelessWidget {
                           ),
                           const SizedBox(height: 12),
                           Text(
-                            isAr
-                                ? 'يتوفر تحديث جديد للتطبيق. يرجى تنزيل النسخة الجديدة للحصول على آخر الميزات والتحسينات.'
-                                : 'A new version of the app is available. Please download the latest version to get the newest features and improvements.',
+                            changelog.isNotEmpty
+                                ? changelog
+                                : (isAr
+                                    ? 'يتوفر تحديث جديد للتطبيق عبر GitHub. يرجى تنزيل النسخة الجديدة للحصول على آخر الميزات.'
+                                    : 'A new version of the app is available on GitHub. Please download to update.'),
                             style: TextStyle(
                               fontSize: 13,
                               color: AppTheme.textSecondary,
@@ -544,14 +526,20 @@ class SettingsScreen extends StatelessWidget {
                           SizedBox(
                             width: double.infinity,
                             child: ElevatedButton.icon(
-                              onPressed: () async {
-                                final uri = Uri.parse(updateUrl);
-                                if (await canLaunchUrl(uri)) {
-                                  await launchUrl(uri, mode: LaunchMode.externalApplication);
-                                }
+                              onPressed: () {
+                                showDialog(
+                                  context: context,
+                                  barrierDismissible: false,
+                                  builder: (ctx) => DownloadProgressDialog(
+                                    currentVersion: _kCurrentVersion,
+                                    latestVersion: latestVersion,
+                                    updateUrl: updateUrl,
+                                    isAr: isAr,
+                                  ),
+                                );
                               },
-                              icon: const Icon(Icons.download_rounded, size: 18),
-                              label: Text(isAr ? 'تنزيل النسخة الجديدة' : 'Download New Version'),
+                              icon: const Icon(Icons.file_download_rounded, size: 18),
+                              label: Text(isAr ? 'تنزيل التحديث APK من GitHub 🚀' : 'Download APK from GitHub 🚀'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.accentAmber,
                                 foregroundColor: AppTheme.surfaceDark,
@@ -642,8 +630,8 @@ class SettingsScreen extends StatelessWidget {
                             ),
                             ElevatedButton.icon(
                               onPressed: () => _showShopQRCodeModal(context, shopName, shopCode),
-                              icon: const Icon(Icons.qr_code_rounded, size: 16),
-                              label: Text(isAr ? 'رمز QR' : 'QR Code'),
+                              icon: const Icon(Icons.vpn_key_rounded, size: 16),
+                              label: Text(isAr ? 'كود المحل' : 'Shop Code'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.accentAmber,
                                 foregroundColor: Colors.black,
@@ -660,87 +648,6 @@ class SettingsScreen extends StatelessWidget {
                 },
               ),
             ],
-
-            // ─── Group: AI Assistant ────────────────────────────
-            Text(
-              isAr ? 'الذكاء الاصطناعي والمساعدة' : 'AI Assistant & Support',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.accentAmber,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceCard,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppTheme.borderSubtle),
-              ),
-              child: Material(
-                color: Colors.transparent,
-                borderRadius: BorderRadius.circular(24),
-                child: InkWell(
-                  borderRadius: BorderRadius.circular(24),
-                  onTap: () => Navigator.push(
-                    context,
-                    MaterialPageRoute(builder: (context) => const AiAssistantScreen()),
-                  ),
-                  child: Padding(
-                    padding: const EdgeInsets.all(16),
-                    child: Row(
-                      children: [
-                        Container(
-                          padding: const EdgeInsets.all(10),
-                          decoration: BoxDecoration(
-                            color: AppTheme.accentAmber.withValues(alpha: 0.15),
-                            borderRadius: BorderRadius.circular(14),
-                            border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.3)),
-                          ),
-                          child: Icon(
-                            Icons.auto_awesome_rounded,
-                            color: AppTheme.accentAmber,
-                            size: 22,
-                          ),
-                        ),
-                        const SizedBox(width: 14),
-                        Expanded(
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Text(
-                                isAr ? 'مساعد TUSSI الذكي' : 'TUSSI AI Assistant',
-                                style: const TextStyle(
-                                  fontSize: 16,
-                                  fontWeight: FontWeight.bold,
-                                ),
-                              ),
-                              const SizedBox(height: 3),
-                              Text(
-                                isAr
-                                    ? 'مرشدك المدمج لشرح وتدريب استخدام التطبيق بالتفصيل'
-                                    : 'Interactive guide to learn all app features',
-                                style: TextStyle(
-                                  fontSize: 12,
-                                  color: AppTheme.textMuted,
-                                ),
-                              ),
-                            ],
-                          ),
-                        ),
-                        Icon(
-                          Icons.arrow_forward_ios_rounded,
-                          size: 16,
-                          color: AppTheme.accentAmber,
-                        ),
-                      ],
-                    ),
-                  ),
-                ),
-              ),
-            ),
-            const SizedBox(height: 24),
 
             // ─── Group 1: Appearance & Language ─────────────────
             Text(
@@ -903,6 +810,82 @@ class SettingsScreen extends StatelessWidget {
                             ),
                           ),
                         ],
+                        const SizedBox(height: 10),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 20),
+                          child: Align(
+                            alignment: Alignment.centerRight,
+                            child: Text(
+                              isAr ? 'الثيمات الجاهزة للتطبيق (5 ثيمات):' : 'Ready Themes (5 Presets):',
+                              style: TextStyle(fontSize: 13, fontWeight: FontWeight.bold, color: AppTheme.accentAmber),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 8),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: Wrap(
+                            spacing: 8,
+                            runSpacing: 8,
+                            children: [
+                              ...AppTheme.presets.entries.where((e) => e.key != 'custom').map((entry) {
+                                final preset = entry.value;
+                                final isSelected = themeProvider.currentPresetId == preset.id;
+
+                                return InkWell(
+                                  onTap: () => themeProvider.setPresetTheme(preset.id),
+                                  borderRadius: BorderRadius.circular(12),
+                                  child: Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                                    decoration: BoxDecoration(
+                                      color: isSelected ? preset.accentPrimary.withOpacity(0.2) : AppTheme.surfaceElevated,
+                                      borderRadius: BorderRadius.circular(12),
+                                      border: Border.all(
+                                        color: isSelected ? preset.accentPrimary : AppTheme.borderSubtle,
+                                        width: isSelected ? 2 : 1,
+                                      ),
+                                    ),
+                                    child: Row(
+                                      mainAxisSize: MainAxisSize.min,
+                                      children: [
+                                        Icon(preset.icon, size: 16, color: preset.accentPrimary),
+                                        const SizedBox(width: 6),
+                                        Text(
+                                          isAr ? preset.nameAr : preset.nameEn,
+                                          style: TextStyle(
+                                            fontSize: 12,
+                                            fontWeight: isSelected ? FontWeight.bold : FontWeight.w500,
+                                            color: isSelected ? preset.accentPrimary : AppTheme.textPrimary,
+                                          ),
+                                        ),
+                                      ],
+                                    ),
+                                  ),
+                                );
+                              }),
+                            ],
+                          ),
+                        ),
+                        const SizedBox(height: 12),
+                        Padding(
+                          padding: const EdgeInsets.symmetric(horizontal: 16),
+                          child: SizedBox(
+                            width: double.infinity,
+                            child: OutlinedButton.icon(
+                              onPressed: () => _showCustomThemeDialog(context, themeProvider),
+                              icon: Icon(Icons.palette_rounded, color: AppTheme.accentAmber),
+                              label: Text(
+                                isAr ? 'إنشاء ثيم خاص 🎨 (Custom Theme)' : 'Create Custom Theme 🎨',
+                                style: TextStyle(color: AppTheme.accentAmber, fontWeight: FontWeight.bold),
+                              ),
+                              style: OutlinedButton.styleFrom(
+                                side: BorderSide(color: AppTheme.accentAmber),
+                                padding: const EdgeInsets.symmetric(vertical: 12),
+                              ),
+                            ),
+                          ),
+                        ),
+                        const SizedBox(height: 12),
                       ],
                     ),
                   ),
@@ -1076,6 +1059,22 @@ class SettingsScreen extends StatelessWidget {
                       trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
                       onTap: () => _showFabricActionsMenu(context, firestoreService, shopId),
                     ),
+                    const Divider(height: 1, indent: 20, endIndent: 20),
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
+                      leading: Icon(Icons.analytics_rounded, color: AppTheme.accentAmber),
+                      title: Text(
+                        isAr ? 'إحصائيات مبيعات الأقمشة 📊' : 'Fabric Sales Statistics 📊',
+                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      ),
+                      subtitle: Text(
+                        isAr ? 'عرض الأقمشة المباعة من الأكثر طلباً إلى الأقل' : 'Sold fabrics sorted by popularity',
+                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                      ),
+                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
+                      onTap: () => _showFabricSalesStatsBottomSheet(context, firestoreService, shopId),
+                    ),
+
                   ],
                 ),
               ),
@@ -1295,6 +1294,18 @@ class SettingsScreen extends StatelessWidget {
                 onTap: () {
                   Navigator.of(ctx).pop();
                   _showEditFabricPricePicker(context, firestoreService, shopId);
+                },
+              ),
+              const Divider(height: 1),
+              ListTile(
+                leading: Icon(Icons.scale_rounded, color: AppTheme.accentAmber),
+                title: Text(
+                  isAr ? 'تعديل وحدة القماش' : 'Edit Fabric Unit',
+                  style: TextStyle(color: AppTheme.textPrimary, fontWeight: FontWeight.w600),
+                ),
+                onTap: () {
+                  Navigator.of(ctx).pop();
+                  _showEditFabricUnitPicker(context, firestoreService, shopId);
                 },
               ),
               const Divider(height: 1),
@@ -1787,6 +1798,196 @@ class SettingsScreen extends StatelessWidget {
                                         );
                                         if (newPrice != null) {
                                           await firestoreService.updateFabricPrice(type.name, newPrice, shopId);
+                                          setState(() {});
+                                        }
+                                      },
+                                    ),
+                                  );
+                                },
+                              ),
+                      ),
+                    ],
+                  ),
+                );
+              },
+            );
+          },
+        );
+      },
+    );
+  }
+
+  void _showEditFabricUnitPicker(BuildContext context, FirestoreService firestoreService, String shopId) {
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: AppTheme.surfaceDark,
+      shape: const RoundedRectangleBorder(
+        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
+      ),
+      builder: (ctx) {
+        String searchQuery = '';
+        final isAr = context.tr('tab_orders') == 'الطلبيات';
+
+        return StreamBuilder<List<FabricType>>(
+          stream: firestoreService.streamFabricTypes(shopId),
+          builder: (context, snapshot) {
+            final fabrics = snapshot.data ?? [];
+            return StatefulBuilder(
+              builder: (context, setState) {
+                final filtered = fabrics.where((type) {
+                  return AppTheme.matchesFuzzy(searchQuery, type.name);
+                }).toList();
+
+                return Padding(
+                  padding: EdgeInsets.only(
+                    left: 20,
+                    right: 20,
+                    top: 20,
+                    bottom: MediaQuery.of(context).viewInsets.bottom + 20,
+                  ),
+                  child: Column(
+                    mainAxisSize: MainAxisSize.min,
+                    crossAxisAlignment: CrossAxisAlignment.start,
+                    children: [
+                      Row(
+                        mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                        children: [
+                          Text(
+                            isAr ? 'تعديل وحدة القماش' : 'Edit Fabric Unit',
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.bold,
+                            ),
+                          ),
+                          IconButton(
+                            icon: const Icon(Icons.close_rounded),
+                            onPressed: () => Navigator.of(context).pop(),
+                          ),
+                        ],
+                      ),
+                      const SizedBox(height: 12),
+                      TextField(
+                        autofocus: true,
+                        decoration: InputDecoration(
+                          hintText: isAr ? 'بحث عن قماش...' : 'Search fabric...',
+                          prefixIcon: const Icon(Icons.search_rounded),
+                          contentPadding: const EdgeInsets.symmetric(horizontal: 16, vertical: 12),
+                        ),
+                        onChanged: (val) {
+                          setState(() {
+                            searchQuery = val;
+                          });
+                        },
+                      ),
+                      const SizedBox(height: 16),
+                      ConstrainedBox(
+                        constraints: BoxConstraints(
+                          maxHeight: MediaQuery.of(context).size.height * 0.4,
+                        ),
+                        child: filtered.isEmpty
+                            ? Padding(
+                                padding: const EdgeInsets.all(24),
+                                child: Center(
+                                  child: Text(
+                                    isAr ? 'لم يتم العثور على أقمشة' : 'No fabrics found',
+                                    style: TextStyle(color: AppTheme.textMuted),
+                                  ),
+                                ),
+                              )
+                            : ListView.separated(
+                                shrinkWrap: true,
+                                itemCount: filtered.length,
+                                separatorBuilder: (context, index) => const Divider(height: 1),
+                                itemBuilder: (context, idx) {
+                                  final type = filtered[idx];
+                                  final unitLabel = type.unit == 'kg'
+                                      ? (isAr ? 'الكيلوجرام (كغ)' : 'Kilogram (kg)')
+                                      : (type.unit == 'yard'
+                                          ? (isAr ? 'اليارد' : 'Yard')
+                                          : (isAr ? 'المتر' : 'Meter'));
+
+                                  return ListTile(
+                                    contentPadding: const EdgeInsets.symmetric(horizontal: 8, vertical: 4),
+                                    title: Text(
+                                      type.name,
+                                      style: TextStyle(color: AppTheme.textPrimary),
+                                    ),
+                                    subtitle: Text(
+                                      '${isAr ? 'الوحدة الحالية:' : 'Current Unit:'} $unitLabel',
+                                      style: TextStyle(color: AppTheme.textSecondary, fontSize: 11),
+                                    ),
+                                    trailing: IconButton(
+                                      icon: Icon(Icons.edit_rounded, color: AppTheme.accentAmber, size: 22),
+                                      onPressed: () async {
+                                        String selectedUnit = type.unit.isNotEmpty ? type.unit : 'meter';
+                                        final newUnit = await showDialog<String>(
+                                          context: context,
+                                          builder: (dialogCtx) => StatefulBuilder(
+                                            builder: (ctx, setDialogState) => AlertDialog(
+                                              title: Text(isAr ? 'تعديل وحدة القماش' : 'Edit Fabric Unit'),
+                                              content: Column(
+                                                mainAxisSize: MainAxisSize.min,
+                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                children: [
+                                                  Text(
+                                                    isAr
+                                                        ? 'اختر الوحدة الجديدة لقماش "${type.name}":'
+                                                        : 'Select new unit for fabric "${type.name}":',
+                                                    style: const TextStyle(fontSize: 14),
+                                                  ),
+                                                  const SizedBox(height: 12),
+                                                  RadioListTile<String>(
+                                                    title: Text(context.tr('meter_label')),
+                                                    value: 'meter',
+                                                    groupValue: selectedUnit,
+                                                    activeColor: AppTheme.accentAmber,
+                                                    contentPadding: EdgeInsets.zero,
+                                                    onChanged: (val) {
+                                                      if (val != null) setDialogState(() => selectedUnit = val);
+                                                    },
+                                                  ),
+                                                  RadioListTile<String>(
+                                                    title: Text(context.tr('kg_label')),
+                                                    value: 'kg',
+                                                    groupValue: selectedUnit,
+                                                    activeColor: AppTheme.accentAmber,
+                                                    contentPadding: EdgeInsets.zero,
+                                                    onChanged: (val) {
+                                                      if (val != null) setDialogState(() => selectedUnit = val);
+                                                    },
+                                                  ),
+                                                  RadioListTile<String>(
+                                                    title: Text(context.tr('yard_label')),
+                                                    value: 'yard',
+                                                    groupValue: selectedUnit,
+                                                    activeColor: AppTheme.accentAmber,
+                                                    contentPadding: EdgeInsets.zero,
+                                                    onChanged: (val) {
+                                                      if (val != null) setDialogState(() => selectedUnit = val);
+                                                    },
+                                                  ),
+                                                ],
+                                              ),
+                                              actions: [
+                                                TextButton(
+                                                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                                                  child: Text(isAr ? 'إلغاء' : 'Cancel'),
+                                                ),
+                                                ElevatedButton(
+                                                  onPressed: () => Navigator.of(dialogCtx).pop(selectedUnit),
+                                                  style: ElevatedButton.styleFrom(
+                                                    backgroundColor: AppTheme.accentAmber,
+                                                    foregroundColor: AppTheme.surfaceDark,
+                                                  ),
+                                                  child: Text(isAr ? 'حفظ' : 'Save'),
+                                                ),
+                                              ],
+                                            ),
+                                          ),
+                                        );
+                                        if (newUnit != null && newUnit != type.unit) {
+                                          await firestoreService.updateFabricUnit(type.name, newUnit, shopId);
                                           setState(() {});
                                         }
                                       },
@@ -2622,4 +2823,372 @@ class SettingsScreen extends StatelessWidget {
       },
     );
   }
+
+  void _showCustomThemeDialog(BuildContext context, ThemeProvider themeProvider) {
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+    final colors = [
+      const Color(0xFFF5C842), // Gold / Amber
+      const Color(0xFFEC4899), // Pink / Rose
+      const Color(0xFFA855F7), // Purple / Violet
+      const Color(0xFF6366F1), // Indigo
+      const Color(0xFF38BDF8), // Cyan / Sky
+      const Color(0xFF10B981), // Emerald
+      const Color(0xFF84CC16), // Lime
+      const Color(0xFFF97316), // Orange
+      const Color(0xFFEF4444), // Crimson / Red
+      const Color(0xFFD4D4D4), // Silver / White
+    ];
+
+    Color selectedColor = AppTheme.accentAmber;
+    bool selectedIsDark = themeProvider.isDarkMode;
+
+    showDialog(
+      context: context,
+      builder: (ctx) => StatefulBuilder(
+        builder: (context, setDialogState) {
+          return AlertDialog(
+            backgroundColor: AppTheme.surfaceDark,
+            title: Row(
+              children: [
+                Icon(Icons.palette_rounded, color: selectedColor),
+                const SizedBox(width: 10),
+                Text(isAr ? 'إنشاء ثيم خاص' : 'Create Custom Theme'),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  isAr ? 'اختر اللون الرئيسي للتطبيق:' : 'Select Primary Accent Color:',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 12),
+                Wrap(
+                  spacing: 10,
+                  runSpacing: 10,
+                  children: colors.map((c) {
+                    final isSelected = selectedColor.value == c.value;
+                    return GestureDetector(
+                      onTap: () {
+                        setDialogState(() {
+                          selectedColor = c;
+                        });
+                      },
+                      child: Container(
+                        width: 42,
+                        height: 42,
+                        decoration: BoxDecoration(
+                          color: c,
+                          shape: BoxShape.circle,
+                          border: Border.all(
+                            color: isSelected ? Colors.white : Colors.transparent,
+                            width: 3,
+                          ),
+                          boxShadow: isSelected
+                              ? [BoxShadow(color: c.withOpacity(0.6), blurRadius: 10, spreadRadius: 2)]
+                              : [],
+                        ),
+                        child: isSelected
+                            ? const Icon(Icons.check_rounded, color: Colors.black, size: 22)
+                            : null,
+                      ),
+                    );
+                  }).toList(),
+                ),
+                const SizedBox(height: 20),
+                Text(
+                  isAr ? 'اختر خلفية التطبيق:' : 'Select Background Mode:',
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: ChoiceChip(
+                        avatar: const Icon(Icons.dark_mode_rounded, size: 16),
+                        label: Text(isAr ? 'داكن 🌙' : 'Dark 🌙'),
+                        selected: selectedIsDark,
+                        selectedColor: selectedColor,
+                        onSelected: (val) {
+                          setDialogState(() {
+                            selectedIsDark = true;
+                          });
+                        },
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    Expanded(
+                      child: ChoiceChip(
+                        avatar: const Icon(Icons.light_mode_rounded, size: 16),
+                        label: Text(isAr ? 'مضيء ☀️' : 'Light ☀️'),
+                        selected: !selectedIsDark,
+                        selectedColor: selectedColor,
+                        onSelected: (val) {
+                          setDialogState(() {
+                            selectedIsDark = false;
+                          });
+                        },
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+            actions: [
+              TextButton(
+                onPressed: () => Navigator.of(ctx).pop(),
+                child: Text(isAr ? 'إلغاء' : 'Cancel'),
+              ),
+              ElevatedButton(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: selectedColor,
+                  foregroundColor: selectedIsDark ? Colors.black : Colors.white,
+                ),
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  themeProvider.setCustomTheme(
+                    primaryColor: selectedColor,
+                    isDark: selectedIsDark,
+                  );
+                },
+                child: Text(isAr ? 'تطبيق الثيم' : 'Apply Theme'),
+              ),
+            ],
+          );
+        },
+      ),
+    );
+  }
+
+  void _showFabricSalesStatsBottomSheet(BuildContext context, FirestoreService firestoreService, String shopId) {
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+
+    showModalBottomSheet(
+      context: context,
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      builder: (ctx) {
+        return Container(
+          height: MediaQuery.of(ctx).size.height * 0.75,
+          decoration: BoxDecoration(
+            color: AppTheme.surfaceCard,
+            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
+            border: Border.all(color: AppTheme.borderSubtle),
+          ),
+          child: Column(
+            children: [
+              // Handle bar
+              Center(
+                child: Container(
+                  margin: const EdgeInsets.only(top: 12, bottom: 8),
+                  width: 40,
+                  height: 4,
+                  decoration: BoxDecoration(
+                    color: AppTheme.textMuted.withOpacity(0.3),
+                    borderRadius: BorderRadius.circular(2),
+                  ),
+                ),
+              ),
+              // Header
+              Padding(
+                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
+                child: Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(10),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentAmber.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                      child: Icon(Icons.analytics_rounded, color: AppTheme.accentAmber, size: 24),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            isAr ? 'إحصائيات مبيعات الأقمشة 📊' : 'Fabric Sales Statistics 📊',
+                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
+                          ),
+                          const SizedBox(height: 2),
+                          Text(
+                            isAr ? 'يتم احتساب القماش فور إرسال الطلبية فقط' : 'Counted only after sending orders',
+                            style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+                          ),
+                        ],
+                      ),
+                    ),
+                    IconButton(
+                      icon: const Icon(Icons.close_rounded),
+                      onPressed: () => Navigator.of(ctx).pop(),
+                    ),
+                  ],
+                ),
+              ),
+              const Divider(height: 1),
+              // Content
+              Expanded(
+                child: StreamBuilder<Map<String, int>>(
+                  stream: firestoreService.streamFabricSalesStats(shopId),
+                  builder: (context, snapshot) {
+                    if (snapshot.connectionState == ConnectionState.waiting) {
+                      return const Center(child: CircularProgressIndicator());
+                    }
+
+                    final Map<String, int> stats = snapshot.data ?? {};
+                    // Filter out fabrics with <= 0 sales or empty names
+                    final salesList = stats.entries
+                        .where((e) => e.key.trim().isNotEmpty && e.value > 0)
+                        .toList();
+
+                    // Sort descending from highest sales to lowest
+                    salesList.sort((a, b) => b.value.compareTo(a.value));
+
+                    if (salesList.isEmpty) {
+                      return Center(
+                        child: Padding(
+                          padding: const EdgeInsets.all(32.0),
+                          child: Column(
+                            mainAxisAlignment: MainAxisAlignment.center,
+                            children: [
+                              Icon(Icons.inventory_2_outlined, size: 64, color: AppTheme.textMuted.withOpacity(0.4)),
+                              const SizedBox(height: 16),
+                              Text(
+                                isAr ? 'لا توجد أقمشة مباعة حتى الآن' : 'No sold fabrics yet',
+                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                              ),
+                              const SizedBox(height: 8),
+                              Text(
+                                isAr ? 'يتم احتساب القماش بمقدار +1 تلقائياً بعد إرسال الطلبية 🚀' : 'Fabrics get +1 count automatically upon sending orders 🚀',
+                                textAlign: TextAlign.center,
+                                style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                              ),
+                            ],
+                          ),
+                        ),
+                      );
+                    }
+
+                    final totalSales = salesList.fold<int>(0, (sum, item) => sum + item.value);
+
+                    return ListView.separated(
+                      padding: const EdgeInsets.all(20),
+                      itemCount: salesList.length,
+                      separatorBuilder: (_, __) => const SizedBox(height: 12),
+                      itemBuilder: (context, index) {
+                        final entry = salesList[index];
+                        final fabricName = entry.key;
+                        final count = entry.value;
+                        final percentage = totalSales > 0 ? (count / totalSales * 100).toStringAsFixed(1) : '0';
+
+                        String rankBadge;
+                        Color rankColor;
+                        if (index == 0) {
+                          rankBadge = '🥇';
+                          rankColor = const Color(0xFFFFD700);
+                        } else if (index == 1) {
+                          rankBadge = '🥈';
+                          rankColor = const Color(0xFFC0C0C0);
+                        } else if (index == 2) {
+                          rankBadge = '🥉';
+                          rankColor = const Color(0xFFCD7F32);
+                        } else {
+                          rankBadge = '#${index + 1}';
+                          rankColor = AppTheme.textMuted;
+                        }
+
+                        return Container(
+                          padding: const EdgeInsets.all(16),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceCard,
+                            borderRadius: BorderRadius.circular(16),
+                            border: Border.all(
+                              color: index == 0 ? AppTheme.accentAmber.withOpacity(0.5) : AppTheme.borderSubtle,
+                              width: index == 0 ? 1.5 : 1.0,
+                            ),
+                          ),
+                          child: Column(
+                            crossAxisAlignment: CrossAxisAlignment.start,
+                            children: [
+                              Row(
+                                children: [
+                                  Container(
+                                    width: 36,
+                                    height: 36,
+                                    alignment: Alignment.center,
+                                    decoration: BoxDecoration(
+                                      color: rankColor.withOpacity(0.15),
+                                      shape: BoxShape.circle,
+                                    ),
+                                    child: Text(
+                                      rankBadge,
+                                      style: TextStyle(
+                                        fontSize: index < 3 ? 18 : 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: rankColor,
+                                      ),
+                                    ),
+                                  ),
+                                  const SizedBox(width: 14),
+                                  Expanded(
+                                    child: Text(
+                                      fabricName,
+                                      style: const TextStyle(
+                                        fontSize: 16,
+                                        fontWeight: FontWeight.bold,
+                                      ),
+                                    ),
+                                  ),
+                                  Container(
+                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
+                                    decoration: BoxDecoration(
+                                      color: AppTheme.accentAmber.withOpacity(0.15),
+                                      borderRadius: BorderRadius.circular(20),
+                                    ),
+                                    child: Text(
+                                      isAr ? '$count مرة بيع' : '$count Sales',
+                                      style: TextStyle(
+                                        fontSize: 13,
+                                        fontWeight: FontWeight.bold,
+                                        color: AppTheme.accentAmber,
+                                      ),
+                                    ),
+                                  ),
+                                ],
+                              ),
+                              const SizedBox(height: 12),
+                              ClipRRect(
+                                borderRadius: BorderRadius.circular(6),
+                                child: LinearProgressIndicator(
+                                  value: totalSales > 0 ? count / totalSales : 0,
+                                  backgroundColor: AppTheme.borderSubtle.withOpacity(0.3),
+                                  color: index == 0 ? AppTheme.accentAmber : Colors.blueAccent,
+                                  minHeight: 6,
+                                ),
+                              ),
+                              const SizedBox(height: 6),
+                              Align(
+                                alignment: Alignment.centerLeft,
+                                child: Text(
+                                  '$percentage% من إجمالي المبيعات',
+                                  style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                                ),
+                              ),
+                            ],
+                          ),
+                        );
+                      },
+                    );
+                  },
+                ),
+              ),
+            ],
+          ),
+        );
+      },
+    );
+  }
 }
+

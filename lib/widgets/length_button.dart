@@ -112,8 +112,8 @@ class _LengthButtonState extends State<LengthButton> {
             Text(
               _displayLength,
               style: TextStyle(
-                fontSize: 16,
-                fontWeight: FontWeight.w600,
+                fontSize: 18,
+                fontWeight: FontWeight.bold,
                 color: isSelected
                     ? AppTheme.accentAmber
                     : AppTheme.textPrimary,
@@ -122,7 +122,7 @@ class _LengthButtonState extends State<LengthButton> {
             if (widget.multiplier > 0) ...[
               const SizedBox(width: 6),
               Container(
-                padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                padding: const EdgeInsets.symmetric(horizontal: 9, vertical: 3),
                 decoration: BoxDecoration(
                   color: AppTheme.accentAmber,
                   borderRadius: BorderRadius.circular(8),
@@ -130,8 +130,8 @@ class _LengthButtonState extends State<LengthButton> {
                 child: Text(
                   '×${widget.multiplier}',
                   style: TextStyle(
-                    fontSize: 12,
-                    fontWeight: FontWeight.w700,
+                    fontSize: 15,
+                    fontWeight: FontWeight.w900,
                     color: AppTheme.surfaceDark,
                   ),
                 ),
