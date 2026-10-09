@@ -5,6 +5,7 @@ import 'package:flutter/material.dart';
 import 'package:http/http.dart' as http;
 import 'package:path_provider/path_provider.dart';
 import 'package:url_launcher/url_launcher.dart';
+import 'package:open_filex/open_filex.dart';
 import '../theme/app_theme.dart';
 
 /// Clockwise circular progress painter starting at 12 o'clock (top position)
@@ -102,10 +103,9 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
       final request = http.Request('GET', Uri.parse(widget.updateUrl));
       final response = await client.send(request);
 
-      if (response.statusCode == 200) {
+      if (response.statusCode == 200 || response.statusCode == 302) {
         final contentLength = response.contentLength ?? 0;
         int receivedBytes = 0;
-
         List<int> bytes = [];
 
         _downloadSub = response.stream.listen(
@@ -118,8 +118,9 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
                 if (contentLength > 0) {
                   _progress = (receivedBytes / contentLength).clamp(0.0, 1.0);
                 } else {
-                  // Fallback progress estimation if content length header is missing
-                  _progress = (_progress + 0.05).clamp(0.0, 0.95);
+                  // Dynamic estimation if content-length header is missing
+                  double estimatedTotal = 50000000.0; // ~50MB default estimate
+                  _progress = (receivedBytes / estimatedTotal).clamp(0.0, 0.95);
                 }
                 final percent = (_progress * 100).toInt();
                 _statusMessage = widget.isAr
@@ -133,26 +134,34 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
               setState(() {
                 _progress = 1.0;
                 _isCompleted = true;
-                _statusMessage = widget.isAr ? 'اكتمل التحميل بنجاح 🚀' : 'Download Complete 🚀';
+                _statusMessage = widget.isAr ? 'جاري فتح نافذة التثبيت... 🚀' : 'Opening installer... 🚀';
               });
             }
 
-            // Save APK to temp file
             try {
               final tempDir = await getTemporaryDirectory();
-              final file = File('${tempDir.path}/app-update-${widget.latestVersion}.apk');
+              final file = File('${tempDir.path}/tussi-update-${widget.latestVersion}.apk');
               await file.writeAsBytes(bytes);
 
-              // Launch installer / open file or URI
-              final uri = Uri.parse(widget.updateUrl);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
+              // Launch Android package installer directly!
+              final result = await OpenFilex.open(
+                file.path,
+                type: 'application/vnd.android.package-archive',
+              );
+
+              if (result.type != ResultType.done) {
+                // Fallback to browser if package opener returns an error
+                final uri = Uri.parse(widget.updateUrl);
+                if (await canLaunchUrl(uri)) {
+                  await launchUrl(uri, mode: LaunchMode.externalApplication);
+                }
+              }
+
+              if (mounted) {
+                Navigator.of(context, rootNavigator: true).pop();
               }
             } catch (_) {
-              final uri = Uri.parse(widget.updateUrl);
-              if (await canLaunchUrl(uri)) {
-                await launchUrl(uri, mode: LaunchMode.externalApplication);
-              }
+              _fallbackToBrowser();
             }
           },
           onError: (e) {
@@ -164,52 +173,28 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
         _handleError('HTTP status ${response.statusCode}');
       }
     } catch (e) {
-      _simulateDownloadFallback();
+      _fallbackToBrowser();
     }
   }
 
-  /// Fallback simulated smooth download progress if direct streaming is restricted
-  void _simulateDownloadFallback() {
-    Timer.periodic(const Duration(milliseconds: 60), (timer) async {
-      if (!mounted) {
-        timer.cancel();
-        return;
-      }
-      setState(() {
-        _progress += 0.02;
-        if (_progress >= 1.0) {
-          _progress = 1.0;
-          _isCompleted = true;
-          _statusMessage = widget.isAr ? 'اكتمل التحميل بنجاح 🚀' : 'Download Complete 🚀';
-          timer.cancel();
-        } else {
-          final percent = (_progress * 100).toInt();
-          _statusMessage = widget.isAr
-              ? 'جاري تنزيل التحديث ($percent%)'
-              : 'Downloading update ($percent%)';
-        }
-      });
-
-      if (_progress >= 1.0) {
-        final uri = Uri.parse(widget.updateUrl);
-        if (await canLaunchUrl(uri)) {
-          await launchUrl(uri, mode: LaunchMode.externalApplication);
-        }
-      }
-    });
-  }
-
-  void _handleError(String error) {
+  void _fallbackToBrowser() async {
     if (mounted) {
       setState(() {
         _hasError = true;
-        _statusMessage = widget.isAr ? 'فشل التنزيل المباشر. جاري الفتح بالمتصفح...' : 'Opening in browser...';
-      });
-      final uri = Uri.parse(widget.updateUrl);
-      canLaunchUrl(uri).then((can) {
-        if (can) launchUrl(uri, mode: LaunchMode.externalApplication);
+        _statusMessage = widget.isAr ? 'جاري الفتح في المتصفح...' : 'Opening in browser...';
       });
     }
+    final uri = Uri.parse(widget.updateUrl);
+    if (await canLaunchUrl(uri)) {
+      await launchUrl(uri, mode: LaunchMode.externalApplication);
+    }
+    if (mounted) {
+      Navigator.of(context, rootNavigator: true).pop();
+    }
+  }
+
+  void _handleError(String error) {
+    _fallbackToBrowser();
   }
 
   @override

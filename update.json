@@ -1,6 +1,7 @@
 {
   "version": "3.0.5",
-  "url": "https://github.com/Gt2433/TUSSI/releases",
+  "url": "https://github.com/Gt2433/TUSSI/releases/download/v3.0.5/app-release.apk",
+  "downloadUrl": "https://github.com/Gt2433/TUSSI/releases/download/v3.0.5/app-release.apk",
   "changelog": "تحديث 3.0.5: دمج ونقل الأقمشة بين الطلبيات 🔀، وحساب جزئي للأسطوانات والأمتار بنقرة واحدة 🧮.",
   "forceUpdate": false
 }

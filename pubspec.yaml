@@ -55,6 +55,7 @@ dependencies:
   gal: ^2.3.0
   pdf: ^3.11.1
   printing: ^5.13.3
+  open_filex: ^4.6.0
 
 dev_dependencies:
   flutter_test:

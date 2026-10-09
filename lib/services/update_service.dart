@@ -6,20 +6,25 @@ import 'package:http/http.dart' as http;
 class AppUpdateInfo {
   final String version;
   final String url;
+  final String downloadUrl;
   final String changelog;
   final bool forceUpdate;
 
   AppUpdateInfo({
     required this.version,
     required this.url,
+    String? downloadUrl,
     required this.changelog,
     this.forceUpdate = false,
-  });
+  }) : downloadUrl = (downloadUrl != null && downloadUrl.isNotEmpty) ? downloadUrl : url;
 
   factory AppUpdateInfo.fromJson(Map<String, dynamic> json) {
+    final urlStr = json['url'] as String? ?? '';
+    final dlStr = json['downloadUrl'] as String? ?? urlStr;
     return AppUpdateInfo(
       version: json['version'] as String? ?? '',
-      url: json['url'] as String? ?? '',
+      url: urlStr,
+      downloadUrl: dlStr.isNotEmpty ? dlStr : urlStr,
       changelog: json['changelog'] as String? ?? '',
       forceUpdate: json['forceUpdate'] as bool? ?? false,
     );
@@ -29,6 +34,7 @@ class AppUpdateInfo {
     return {
       'version': version,
       'url': url,
+      'downloadUrl': downloadUrl,
       'changelog': changelog,
       'forceUpdate': forceUpdate,
     };

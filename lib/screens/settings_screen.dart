@@ -434,7 +434,7 @@ class SettingsScreen extends StatelessWidget {
                 if (snapshot.hasData && snapshot.data != null) {
                   final updateInfo = snapshot.data!;
                   final latestVersion = updateInfo.version;
-                  final updateUrl = updateInfo.url;
+                  final updateUrl = updateInfo.downloadUrl.isNotEmpty ? updateInfo.downloadUrl : updateInfo.url;
                   final changelog = updateInfo.changelog;
 
                   if (!kIsWeb &&
