@@ -15,6 +15,9 @@ import 'settings_screen.dart';
 import '../providers/order_provider.dart';
 import '../widgets/order_card.dart';
 import '../widgets/calculator_modal.dart';
+import '../widgets/download_progress_dialog.dart';
+import '../services/update_service.dart';
+import 'package:flutter/foundation.dart' show kIsWeb;
 
 /// Main home screen with bottom navigation bar.
 /// Four tabs: Orders, New Order, History, Profile
@@ -29,6 +32,117 @@ class HomeScreenState extends State<HomeScreen> {
   int _currentIndex = 2; // Default to New Order (Add Request) tab in the middle
   List<String> _previousOrderIds = [];
   bool _isFirstLoad = true;
+  static bool _hasCheckedUpdateOnce = false;
+
+  @override
+  void initState() {
+    super.initState();
+    _checkAppUpdateSilently();
+  }
+
+  Future<void> _checkAppUpdateSilently() async {
+    if (_hasCheckedUpdateOnce || kIsWeb) return;
+    _hasCheckedUpdateOnce = true;
+
+    // Small delay to let the app finish rendering initial frame
+    await Future.delayed(const Duration(seconds: 3));
+    if (!mounted) return;
+
+    try {
+      final updateInfo = await UpdateService.checkAppUpdate();
+      if (updateInfo != null &&
+          updateInfo.version.isNotEmpty &&
+          updateInfo.version != SettingsScreen.currentVersion &&
+          mounted) {
+        final isAr = context.read<LanguageProvider>().language == AppLanguage.ar;
+        final downloadUrl = updateInfo.downloadUrl.isNotEmpty ? updateInfo.downloadUrl : updateInfo.url;
+
+        showDialog(
+          context: context,
+          barrierDismissible: !updateInfo.forceUpdate,
+          builder: (ctx) => AlertDialog(
+            backgroundColor: AppTheme.surfaceCard,
+            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(22)),
+            title: Row(
+              children: [
+                Container(
+                  padding: const EdgeInsets.all(8),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                    shape: BoxShape.circle,
+                  ),
+                  child: Icon(Icons.system_update_rounded, color: AppTheme.accentAmber, size: 22),
+                ),
+                const SizedBox(width: 10),
+                Expanded(
+                  child: Text(
+                    isAr ? 'تحديث جديد متوفر 🚀' : 'New Update Available 🚀',
+                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+                  ),
+                ),
+                Container(
+                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
+                  decoration: BoxDecoration(
+                    color: AppTheme.accentAmber,
+                    borderRadius: BorderRadius.circular(8),
+                  ),
+                  child: Text(
+                    'v${updateInfo.version}',
+                    style: TextStyle(color: AppTheme.surfaceDark, fontSize: 11, fontWeight: FontWeight.bold),
+                  ),
+                ),
+              ],
+            ),
+            content: Column(
+              mainAxisSize: MainAxisSize.min,
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                Text(
+                  updateInfo.changelog.isNotEmpty
+                      ? updateInfo.changelog
+                      : (isAr
+                          ? 'يتوفر إصدار جديد للتطبيق يتضمن تحسينات وميزات جديدة. يمكنك التحديث الآن بضغطة واحدة وبشكل مباشر.'
+                          : 'A new version is available with enhancements and new features. Update now with one click.'),
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, height: 1.4),
+                ),
+              ],
+            ),
+            actions: [
+              if (!updateInfo.forceUpdate)
+                TextButton(
+                  onPressed: () => Navigator.of(ctx).pop(),
+                  child: Text(isAr ? 'لاحقاً' : 'Later', style: TextStyle(color: AppTheme.textMuted)),
+                ),
+              ElevatedButton.icon(
+                onPressed: () {
+                  Navigator.of(ctx).pop();
+                  showDialog(
+                    context: context,
+                    barrierDismissible: false,
+                    builder: (_) => DownloadProgressDialog(
+                      currentVersion: SettingsScreen.currentVersion,
+                      latestVersion: updateInfo.version,
+                      updateUrl: downloadUrl,
+                      isAr: isAr,
+                    ),
+                  );
+                },
+                icon: const Icon(Icons.download_rounded, size: 18),
+                label: Text(isAr ? 'تحديث الآن' : 'Update Now'),
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentAmber,
+                  foregroundColor: AppTheme.surfaceDark,
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                ),
+              ),
+            ],
+          ),
+        );
+      }
+    } catch (e) {
+      debugPrint('Silent update check note: $e');
+    }
+  }
 
   void setTab(int index) {
     setState(() {
@@ -202,10 +316,10 @@ class HomeScreenState extends State<HomeScreen> {
                 ),
                 const SizedBox(width: 4),
                 ConstrainedBox(
-                  constraints: const BoxConstraints(maxWidth: 60),
+                  constraints: const BoxConstraints(maxWidth: 95),
                   child: Text(
                     authProvider.displayName,
-                    style: const TextStyle(fontSize: 11),
+                    style: const TextStyle(fontSize: 12, fontWeight: FontWeight.w500),
                     overflow: TextOverflow.ellipsis,
                   ),
                 ),
@@ -213,89 +327,190 @@ class HomeScreenState extends State<HomeScreen> {
             ),
           ),
 
-          // Offline mode toggle and sync status indicator
+          const SizedBox(width: 4),
+          // 3-dots popup menu grouping: Wi-Fi/Offline, Shop Switcher, Calculator, and Sign Out
           Stack(
             alignment: Alignment.center,
             children: [
-              IconButton(
-                padding: const EdgeInsets.all(4),
-                constraints: const BoxConstraints(),
+              PopupMenuButton<String>(
                 icon: Icon(
-                  orderProvider.isOffline
-                      ? Icons.wifi_off_rounded
-                      : Icons.wifi_rounded,
-                  color: orderProvider.isOffline
-                      ? Colors.redAccent
-                      : AppTheme.accentAmber,
-                  size: 20,
+                  Icons.more_vert_rounded,
+                  color: AppTheme.textPrimary,
+                  size: 24,
                 ),
-                onPressed: () => _showOfflineDialog(context, orderProvider),
-                tooltip: orderProvider.isOffline ? 'الوضع دون اتصال' : 'متصل بالإنترنت',
-              ),
-              if (!orderProvider.isOffline && orderProvider.offlineOrders.isNotEmpty)
-                Positioned(
-                  right: 2,
-                  top: 2,
-                  child: Container(
-                    padding: const EdgeInsets.all(2),
-                    decoration: const BoxDecoration(
-                      color: Colors.redAccent,
-                      shape: BoxShape.circle,
+                tooltip: 'المزيد من الخيارات',
+                color: AppTheme.surfaceDark,
+                elevation: 10,
+                shape: RoundedRectangleBorder(
+                  borderRadius: BorderRadius.circular(16),
+                  side: BorderSide(color: Colors.white.withValues(alpha: 0.1)),
+                ),
+                onSelected: (value) {
+                  switch (value) {
+                    case 'calculator':
+                      showCalculatorModal(context);
+                      break;
+                    case 'offline':
+                      _showOfflineDialog(context, orderProvider);
+                      break;
+                    case 'swap_shop':
+                      _showShopSwitcherDialog(context, authProvider);
+                      break;
+                    case 'logout':
+                      _showSignOutDialog(context, authProvider);
+                      break;
+                  }
+                },
+                itemBuilder: (context) {
+                  final isSuperAdmin = authProvider.appUser?.role == 'super_admin' ||
+                      authProvider.user?.email == 'hhcgjvhcnk@gmail.com';
+                  return [
+                    // 1. Calculator
+                    PopupMenuItem<String>(
+                      value: 'calculator',
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(Icons.calculate_rounded, color: AppTheme.accentAmber, size: 18),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            'آلة حاسبة',
+                            style: TextStyle(
+                              color: AppTheme.textPrimary,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
                     ),
-                    constraints: const BoxConstraints(
-                      minWidth: 8,
-                      minHeight: 8,
+
+                    // 2. Wi-Fi / Connection status
+                    PopupMenuItem<String>(
+                      value: 'offline',
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: (orderProvider.isOffline ? Colors.redAccent : Colors.tealAccent).withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: Icon(
+                              orderProvider.isOffline ? Icons.wifi_off_rounded : Icons.wifi_rounded,
+                              color: orderProvider.isOffline ? Colors.redAccent : Colors.tealAccent,
+                              size: 18,
+                            ),
+                          ),
+                          const SizedBox(width: 12),
+                          Expanded(
+                            child: Text(
+                              orderProvider.isOffline ? 'الوضع دون اتصال' : 'حالة الاتصال والإنترنت',
+                              style: TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ),
+                          if (!orderProvider.isOffline && orderProvider.offlineOrders.isNotEmpty)
+                            Container(
+                              padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                              decoration: BoxDecoration(
+                                color: Colors.redAccent,
+                                borderRadius: BorderRadius.circular(10),
+                              ),
+                              child: Text(
+                                '${orderProvider.offlineOrders.length}',
+                                style: const TextStyle(color: Colors.white, fontSize: 10, fontWeight: FontWeight.bold),
+                              ),
+                            ),
+                        ],
+                      ),
+                    ),
+
+                    // 3. Shop Switcher (if super admin)
+                    if (isSuperAdmin)
+                      PopupMenuItem<String>(
+                        value: 'swap_shop',
+                        child: Row(
+                          children: [
+                            Container(
+                              padding: const EdgeInsets.all(7),
+                              decoration: BoxDecoration(
+                                color: Colors.blueAccent.withValues(alpha: 0.15),
+                                borderRadius: BorderRadius.circular(8),
+                              ),
+                              child: const Icon(Icons.swap_horiz_rounded, color: Colors.blueAccent, size: 18),
+                            ),
+                            const SizedBox(width: 12),
+                            Text(
+                              'التنقل بين المحلات',
+                              style: TextStyle(
+                                color: AppTheme.textPrimary,
+                                fontSize: 13,
+                                fontWeight: FontWeight.w600,
+                              ),
+                            ),
+                          ],
+                        ),
+                      ),
+
+                    const PopupMenuDivider(height: 1),
+
+                    // 4. Logout
+                    PopupMenuItem<String>(
+                      value: 'logout',
+                      child: Row(
+                        children: [
+                          Container(
+                            padding: const EdgeInsets.all(7),
+                            decoration: BoxDecoration(
+                              color: Colors.redAccent.withValues(alpha: 0.15),
+                              borderRadius: BorderRadius.circular(8),
+                            ),
+                            child: const Icon(Icons.logout_rounded, color: Colors.redAccent, size: 18),
+                          ),
+                          const SizedBox(width: 12),
+                          Text(
+                            context.tr('sign_out'),
+                            style: const TextStyle(
+                              color: Colors.redAccent,
+                              fontSize: 13,
+                              fontWeight: FontWeight.w600,
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ];
+                },
+              ),
+              if (orderProvider.isOffline || orderProvider.offlineOrders.isNotEmpty)
+                Positioned(
+                  top: 10,
+                  right: 10,
+                  child: IgnorePointer(
+                    child: Container(
+                      width: 8,
+                      height: 8,
+                      decoration: BoxDecoration(
+                        color: orderProvider.isOffline ? Colors.orangeAccent : Colors.redAccent,
+                        shape: BoxShape.circle,
+                        border: Border.all(color: AppTheme.surfaceDark, width: 1.5),
+                      ),
                     ),
                   ),
                 ),
             ],
           ),
           const SizedBox(width: 4),
-
-          // Swap shop button for super admin
-          if (authProvider.appUser?.role == 'super_admin' || authProvider.user?.email == 'hhcgjvhcnk@gmail.com')
-            IconButton(
-              padding: const EdgeInsets.all(4),
-              constraints: const BoxConstraints(),
-              icon: Icon(
-                Icons.swap_horiz_rounded,
-                color: AppTheme.accentAmber,
-                size: 20,
-              ),
-              onPressed: () => _showShopSwitcherDialog(context, authProvider),
-              tooltip: 'التنقل بين المحلات',
-            ),
-          const SizedBox(width: 4),
-
-
-
-          // Calculator
-          IconButton(
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(),
-            icon: Icon(
-              Icons.calculate_rounded,
-              color: AppTheme.accentAmber,
-              size: 20,
-            ),
-            onPressed: () => showCalculatorModal(context),
-            tooltip: 'آلة حاسبة',
-          ),
-          const SizedBox(width: 4),
-
-          // Sign out
-          IconButton(
-            padding: const EdgeInsets.all(4),
-            constraints: const BoxConstraints(),
-            icon: Icon(
-              Icons.logout_rounded,
-              color: AppTheme.textMuted,
-              size: 20,
-            ),
-            onPressed: () => _showSignOutDialog(context, authProvider),
-            tooltip: context.tr('sign_out'),
-          ),
-          const SizedBox(width: 6),
         ],
       ),
       body: Column(

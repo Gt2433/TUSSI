@@ -1,3 +1,4 @@
+import 'dart:ui';
 import 'package:flutter/material.dart';
 import 'package:flutter/services.dart';
 import 'package:flutter/foundation.dart' show kIsWeb;
@@ -11,7 +12,6 @@ import '../providers/language_provider.dart';
 import '../theme/app_theme.dart';
 import '../services/firestore_service.dart';
 import '../models/order_model.dart';
-import 'super_admin_screen.dart';
 import '../models/user_model.dart';
 import 'help_guide_screen.dart';
 import '../services/update_service.dart';
@@ -21,7 +21,365 @@ class SettingsScreen extends StatelessWidget {
   final bool isTab;
   const SettingsScreen({super.key, this.isTab = false});
 
-  static const String _kCurrentVersion = '3.0.5';
+  static const String _kCurrentVersion = '4.0.0';
+  static const String currentVersion = _kCurrentVersion;
+
+  // ─── Glassmorphism Helpers ─────────────────────────────────────
+  static Widget _buildGlassDialog({
+    required BuildContext context,
+    required Widget child,
+    double maxWidth = 420,
+    EdgeInsetsGeometry padding = const EdgeInsets.all(24),
+    double borderRadius = 28,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Dialog(
+      backgroundColor: Colors.transparent,
+      elevation: 0,
+      insetPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 24),
+      child: Center(
+        child: ConstrainedBox(
+          constraints: BoxConstraints(maxWidth: maxWidth),
+          child: ClipRRect(
+            borderRadius: BorderRadius.circular(borderRadius),
+            child: BackdropFilter(
+              filter: ImageFilter.blur(sigmaX: 20, sigmaY: 20),
+              child: Container(
+                padding: padding,
+                decoration: BoxDecoration(
+                  color: (isDark ? const Color(0xFF131722) : Colors.white)
+                      .withOpacity(isDark ? 0.84 : 0.92),
+                  borderRadius: BorderRadius.circular(borderRadius),
+                  border: Border.all(
+                    color: isDark
+                        ? Colors.white.withOpacity(0.14)
+                        : Colors.black.withOpacity(0.08),
+                    width: 1.2,
+                  ),
+                  boxShadow: [
+                    BoxShadow(
+                      color: Colors.black.withOpacity(0.35),
+                      blurRadius: 32,
+                      offset: const Offset(0, 14),
+                    ),
+                  ],
+                ),
+                child: Material(
+                  color: Colors.transparent,
+                  child: child,
+                ),
+              ),
+            ),
+          ),
+        ),
+      ),
+    );
+  }
+
+  static Widget _buildGlassBottomSheet({
+    required BuildContext context,
+    required Widget child,
+    EdgeInsetsGeometry? padding,
+    double borderRadius = 30,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return ClipRRect(
+      borderRadius: BorderRadius.vertical(top: Radius.circular(borderRadius)),
+      child: BackdropFilter(
+        filter: ImageFilter.blur(sigmaX: 22, sigmaY: 22),
+        child: Container(
+          padding: padding ?? const EdgeInsets.symmetric(horizontal: 22, vertical: 16),
+          decoration: BoxDecoration(
+            color: (isDark ? const Color(0xFF131722) : Colors.white)
+                .withOpacity(isDark ? 0.86 : 0.94),
+            borderRadius: BorderRadius.vertical(top: Radius.circular(borderRadius)),
+            border: Border.all(
+              color: isDark
+                  ? Colors.white.withOpacity(0.14)
+                  : Colors.black.withOpacity(0.08),
+              width: 1.2,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: Colors.black.withOpacity(0.3),
+                blurRadius: 28,
+                offset: const Offset(0, -6),
+              ),
+            ],
+          ),
+          child: Material(
+            color: Colors.transparent,
+            child: child,
+          ),
+        ),
+      ),
+    );
+  }
+
+  Widget _buildSectionHeader(String title, IconData icon) {
+    return Padding(
+      padding: const EdgeInsets.only(bottom: 12, top: 8),
+      child: Row(
+        children: [
+          Container(
+            padding: const EdgeInsets.all(6),
+            decoration: BoxDecoration(
+              color: AppTheme.accentAmber.withOpacity(0.15),
+              borderRadius: BorderRadius.circular(8),
+            ),
+            child: Icon(icon, size: 16, color: AppTheme.accentAmber),
+          ),
+          const SizedBox(width: 10),
+          Text(
+            title,
+            style: TextStyle(
+              fontSize: 14,
+              fontWeight: FontWeight.bold,
+              color: AppTheme.accentAmber,
+              letterSpacing: 0.3,
+            ),
+          ),
+        ],
+      ),
+    );
+  }
+
+  Widget _buildGlassCard({
+    required BuildContext context,
+    required Widget child,
+    EdgeInsetsGeometry? margin,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    return Container(
+      margin: margin ?? const EdgeInsets.only(bottom: 24),
+      decoration: BoxDecoration(
+        color: AppTheme.surfaceCard,
+        borderRadius: BorderRadius.circular(24),
+        border: Border.all(
+          color: isDark ? Colors.white.withOpacity(0.08) : Colors.black.withOpacity(0.06),
+          width: 1.2,
+        ),
+        boxShadow: [
+          BoxShadow(
+            color: Colors.black.withOpacity(isDark ? 0.2 : 0.04),
+            blurRadius: 16,
+            offset: const Offset(0, 4),
+          ),
+        ],
+      ),
+      child: ClipRRect(
+        borderRadius: BorderRadius.circular(24),
+        child: child,
+      ),
+    );
+  }
+
+  Widget _buildHeroShopCard({
+    required BuildContext context,
+    required FirestoreService firestoreService,
+    required String shopId,
+    required bool isAr,
+    required String? userRole,
+  }) {
+    final isDark = Theme.of(context).brightness == Brightness.dark;
+    final roleName = userRole == 'shop_admin'
+        ? (isAr ? 'مدير المحل' : 'Shop Admin')
+        : (isAr ? 'عضو في المحل' : 'Shop Member');
+
+    return StreamBuilder<Map<String, dynamic>?>(
+      stream: firestoreService.streamShopDetails(shopId),
+      builder: (context, snapshot) {
+        final shopData = snapshot.data;
+        final shopName = shopData?['name'] as String? ?? (isAr ? 'المحل' : 'My Shop');
+        final rawCode = (shopData?['shopCode'] as String?)?.isNotEmpty == true
+            ? shopData!['shopCode'] as String
+            : ((shopData?['inviteCode'] as String?)?.isNotEmpty == true
+                ? shopData!['inviteCode'] as String
+                : null);
+
+        if (rawCode == null && shopData != null && shopId.isNotEmpty) {
+          firestoreService.ensureShopCode(shopId, shopName, inviteCode: shopData['inviteCode'] as String?);
+        }
+        final shopCode = rawCode ?? '...';
+
+        return Container(
+          margin: const EdgeInsets.only(bottom: 24),
+          decoration: BoxDecoration(
+            gradient: LinearGradient(
+              colors: [
+                AppTheme.accentAmber.withOpacity(isDark ? 0.16 : 0.10),
+                AppTheme.surfaceCard,
+              ],
+              begin: Alignment.topLeft,
+              end: Alignment.bottomRight,
+            ),
+            borderRadius: BorderRadius.circular(28),
+            border: Border.all(
+              color: AppTheme.accentAmber.withOpacity(0.35),
+              width: 1.5,
+            ),
+            boxShadow: [
+              BoxShadow(
+                color: AppTheme.accentAmber.withOpacity(0.08),
+                blurRadius: 24,
+                offset: const Offset(0, 8),
+              ),
+            ],
+          ),
+          child: Padding(
+            padding: const EdgeInsets.all(20),
+            child: Column(
+              crossAxisAlignment: CrossAxisAlignment.start,
+              children: [
+                // Top row: Shop icon + name + role badge
+                Row(
+                  children: [
+                    Container(
+                      width: 50,
+                      height: 50,
+                      decoration: BoxDecoration(
+                        gradient: LinearGradient(
+                          colors: [
+                            AppTheme.accentAmber,
+                            AppTheme.accentAmberDark,
+                          ],
+                          begin: Alignment.topLeft,
+                          end: Alignment.bottomRight,
+                        ),
+                        borderRadius: BorderRadius.circular(16),
+                        boxShadow: [
+                          BoxShadow(
+                            color: AppTheme.accentAmber.withOpacity(0.3),
+                            blurRadius: 10,
+                            offset: const Offset(0, 4),
+                          ),
+                        ],
+                      ),
+                      child: const Icon(
+                        Icons.storefront_rounded,
+                        color: Colors.black,
+                        size: 28,
+                      ),
+                    ),
+                    const SizedBox(width: 14),
+                    Expanded(
+                      child: Column(
+                        crossAxisAlignment: CrossAxisAlignment.start,
+                        children: [
+                          Text(
+                            shopName,
+                            style: const TextStyle(
+                              fontSize: 18,
+                              fontWeight: FontWeight.w800,
+                              letterSpacing: 0.2,
+                            ),
+                            maxLines: 1,
+                            overflow: TextOverflow.ellipsis,
+                          ),
+                          const SizedBox(height: 3),
+                          Container(
+                            padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 2),
+                            decoration: BoxDecoration(
+                              color: AppTheme.accentAmber.withOpacity(0.15),
+                              borderRadius: BorderRadius.circular(6),
+                            ),
+                            child: Text(
+                              roleName,
+                              style: TextStyle(
+                                fontSize: 11,
+                                fontWeight: FontWeight.bold,
+                                color: AppTheme.accentAmber,
+                              ),
+                            ),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 16),
+                const Divider(height: 1),
+                const SizedBox(height: 14),
+                // Code Row with Copy & Quick buttons
+                Text(
+                  isAr ? 'كود الانضمام للمحل (دعوة العمال):' : 'Shop Join Code (Invite Workers):',
+                  style: TextStyle(fontSize: 12, color: AppTheme.textMuted, fontWeight: FontWeight.w500),
+                ),
+                const SizedBox(height: 8),
+                Row(
+                  children: [
+                    Expanded(
+                      child: InkWell(
+                        onTap: () {
+                          Clipboard.setData(ClipboardData(text: shopCode));
+                          ScaffoldMessenger.of(context).showSnackBar(
+                            SnackBar(
+                              content: Text(isAr ? 'تم نسخ كود المحل بنجاح ✓' : 'Shop code copied ✓'),
+                              backgroundColor: AppTheme.successSurface,
+                              behavior: SnackBarBehavior.floating,
+                              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                            ),
+                          );
+                        },
+                        borderRadius: BorderRadius.circular(14),
+                        child: Container(
+                          padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 10),
+                          decoration: BoxDecoration(
+                            color: AppTheme.surfaceElevated,
+                            borderRadius: BorderRadius.circular(14),
+                            border: Border.all(
+                              color: AppTheme.accentAmber.withOpacity(0.3),
+                              width: 1,
+                            ),
+                          ),
+                          child: Row(
+                            mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                            children: [
+                              Text(
+                                shopCode,
+                                style: TextStyle(
+                                  fontSize: 18,
+                                  fontWeight: FontWeight.w900,
+                                  letterSpacing: 2,
+                                  color: AppTheme.accentAmber,
+                                ),
+                              ),
+                              Icon(Icons.copy_rounded, size: 18, color: AppTheme.accentAmber),
+                            ],
+                          ),
+                        ),
+                      ),
+                    ),
+                    const SizedBox(width: 10),
+                    ElevatedButton(
+                      onPressed: () => _showShopQRCodeModal(context, shopName, shopCode),
+                      style: ElevatedButton.styleFrom(
+                        backgroundColor: AppTheme.accentAmber,
+                        foregroundColor: Colors.black,
+                        padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 12),
+                        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
+                        elevation: 0,
+                      ),
+                      child: Row(
+                        children: [
+                          const Icon(Icons.qr_code_rounded, size: 18),
+                          const SizedBox(width: 6),
+                          Text(
+                            isAr ? 'مشاركة' : 'Share',
+                            style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                          ),
+                        ],
+                      ),
+                    ),
+                  ],
+                ),
+              ],
+            ),
+          ),
+        );
+      },
+    );
+  }
 
   // ─── Show "About App" Dialog ──────────────────────────────────
   void _showAboutDialog(BuildContext context) {
@@ -29,173 +387,170 @@ class SettingsScreen extends StatelessWidget {
     
     showDialog(
       context: context,
-      builder: (ctx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: AppTheme.surfaceCard,
-        child: Padding(
-          padding: const EdgeInsets.all(28),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              // Logo/Icon Container
-              Container(
-                width: 90,
-                height: 90,
-                decoration: BoxDecoration(
-                  shape: BoxShape.circle,
-                  color: AppTheme.surfaceDark,
-                  border: Border.all(
-                    color: AppTheme.borderSubtle,
-                    width: 2,
+      builder: (ctx) => _buildGlassDialog(
+        context: ctx,
+        padding: const EdgeInsets.all(28),
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            // Logo/Icon Container
+            Container(
+              width: 90,
+              height: 90,
+              decoration: BoxDecoration(
+                shape: BoxShape.circle,
+                color: AppTheme.surfaceDark,
+                border: Border.all(
+                  color: AppTheme.borderSubtle,
+                  width: 2,
+                ),
+              ),
+              child: ClipOval(
+                child: Transform.scale(
+                  scale: 1.45,
+                  child: Image.asset(
+                    'assets/logo.png',
+                    fit: BoxFit.cover,
+                    errorBuilder: (_, __, ___) => Icon(
+                      Icons.store_rounded,
+                      size: 48,
+                      color: AppTheme.accentAmber,
+                    ),
                   ),
                 ),
-                child: ClipOval(
-                  child: Transform.scale(
-                    scale: 1.45,
+              ),
+            ),
+            const SizedBox(height: 16),
+            // App Name
+            ShaderMask(
+              shaderCallback: (bounds) => AppTheme.accentGradient.createShader(bounds),
+              child: const Text(
+                'TUSSI',
+                style: TextStyle(
+                  fontSize: 26,
+                  fontWeight: FontWeight.w800,
+                  color: Colors.white,
+                  letterSpacing: 4,
+                ),
+              ),
+            ),
+            const SizedBox(height: 6),
+            Text(
+              isAr ? 'نظام إدارة الأقمشة والطلبيات' : 'Fabric & Order Management System',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+              ),
+              textAlign: TextAlign.center,
+            ),
+
+            const SizedBox(height: 14),
+
+            // MBD Tagline Quote & Logo
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceDark.withOpacity(0.7),
+                borderRadius: BorderRadius.circular(16),
+                border: Border.all(color: AppTheme.accentAmber.withOpacity(0.35)),
+              ),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  ClipRRect(
+                    borderRadius: BorderRadius.circular(8),
                     child: Image.asset(
-                      'assets/logo.png',
+                      'assets/MBD.png',
+                      height: 30,
+                      width: 30,
                       fit: BoxFit.cover,
                       errorBuilder: (_, __, ___) => Icon(
-                        Icons.store_rounded,
-                        size: 48,
+                        Icons.workspace_premium_rounded,
                         color: AppTheme.accentAmber,
+                        size: 24,
                       ),
                     ),
                   ),
-                ),
-              ),
-              const SizedBox(height: 16),
-              // App Name
-              ShaderMask(
-                shaderCallback: (bounds) => AppTheme.accentGradient.createShader(bounds),
-                child: const Text(
-                  'TUSSI',
-                  style: TextStyle(
-                    fontSize: 26,
-                    fontWeight: FontWeight.w800,
-                    color: Colors.white,
-                    letterSpacing: 4,
-                  ),
-                ),
-              ),
-              const SizedBox(height: 6),
-              Text(
-                isAr ? 'نظام إدارة الأقمشة والطلبيات' : 'Fabric & Order Management System',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                ),
-                textAlign: TextAlign.center,
-              ),
-
-              const SizedBox(height: 14),
-
-              // MBD Tagline Quote & Logo
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 8),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceDark.withOpacity(0.7),
-                  borderRadius: BorderRadius.circular(16),
-                  border: Border.all(color: AppTheme.accentAmber.withOpacity(0.35)),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    ClipRRect(
-                      borderRadius: BorderRadius.circular(8),
-                      child: Image.asset(
-                        'assets/MBD.png',
-                        height: 30,
-                        width: 30,
-                        fit: BoxFit.cover,
-                        errorBuilder: (_, __, ___) => Icon(
-                          Icons.workspace_premium_rounded,
-                          color: AppTheme.accentAmber,
-                          size: 24,
-                        ),
-                      ),
-                    ),
-                    const SizedBox(width: 10),
-                    Text(
-                      isAr ? '« من مشاريع MBD »' : '« From MBD Projects »',
-                      style: TextStyle(
-                        fontSize: 13,
-                        fontWeight: FontWeight.bold,
-                        color: AppTheme.accentAmber,
-                      ),
-                    ),
-                  ],
-                ),
-              ),
-
-              const SizedBox(height: 16),
-              const Divider(height: 1),
-              const SizedBox(height: 16),
-              // Creator & Info
-              Text(
-                isAr ? 'المطور وبرمجة التطبيق' : 'Developer & Creator',
-                style: TextStyle(
-                  fontSize: 11,
-                  color: AppTheme.textMuted,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 4),
-              Text(
-                'MOHAMMED BAHAYOU',
-                style: TextStyle(
-                  fontSize: 15,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.textPrimary,
-                  letterSpacing: 0.5,
-                ),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 10),
-              Text(
-                isAr ? 'الإصدار الحالي: $_kCurrentVersion' : 'Version: $_kCurrentVersion',
-                style: TextStyle(
-                  fontSize: 12,
-                  color: AppTheme.textSecondary,
-                  fontWeight: FontWeight.w500,
-                ),
-              ),
-              const SizedBox(height: 24),
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.accentAmber,
-                    foregroundColor: AppTheme.surfaceDark,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(
-                      borderRadius: BorderRadius.circular(14),
+                  const SizedBox(width: 10),
+                  Text(
+                    isAr ? '« من مشاريع MBD »' : '« From MBD Projects »',
+                    style: TextStyle(
+                      fontSize: 13,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accentAmber,
                     ),
                   ),
-                  icon: const Icon(Icons.send_rounded),
-                  label: Text(
-                    isAr ? 'تواصل مع المطور' : 'Contact Developer',
-                    style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
+                ],
+              ),
+            ),
+
+            const SizedBox(height: 16),
+            const Divider(height: 1),
+            const SizedBox(height: 16),
+            // Creator & Info
+            Text(
+              isAr ? 'المطور وبرمجة التطبيق' : 'Developer & Creator',
+              style: TextStyle(
+                fontSize: 11,
+                color: AppTheme.textMuted,
+                letterSpacing: 0.5,
+              ),
+            ),
+            const SizedBox(height: 4),
+            Text(
+              'MOHAMMED BAHAYOU',
+              style: TextStyle(
+                fontSize: 15,
+                fontWeight: FontWeight.bold,
+                color: AppTheme.textPrimary,
+                letterSpacing: 0.5,
+              ),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 10),
+            Text(
+              isAr ? 'الإصدار الحالي: $_kCurrentVersion' : 'Version: $_kCurrentVersion',
+              style: TextStyle(
+                fontSize: 12,
+                color: AppTheme.textSecondary,
+                fontWeight: FontWeight.w500,
+              ),
+            ),
+            const SizedBox(height: 24),
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentAmber,
+                  foregroundColor: AppTheme.surfaceDark,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(
+                    borderRadius: BorderRadius.circular(14),
                   ),
-                  onPressed: () async {
-                    Navigator.of(ctx).pop();
-                    final url = Uri.parse('https://wa.me/213655603829');
-                    if (await canLaunchUrl(url)) {
-                      await launchUrl(url, mode: LaunchMode.externalApplication);
-                    }
-                  },
                 ),
-              ),
-              const SizedBox(height: 12),
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: Text(
-                  isAr ? 'إغلاق' : 'Close',
-                  style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+                icon: const Icon(Icons.send_rounded),
+                label: Text(
+                  isAr ? 'تواصل مع المطور' : 'Contact Developer',
+                  style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
                 ),
+                onPressed: () async {
+                  Navigator.of(ctx).pop();
+                  final url = Uri.parse('https://wa.me/213655603829');
+                  if (await canLaunchUrl(url)) {
+                    await launchUrl(url, mode: LaunchMode.externalApplication);
+                  }
+                },
               ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 12),
+            TextButton(
+              onPressed: () => Navigator.of(ctx).pop(),
+              child: Text(
+                isAr ? 'إغلاق' : 'Close',
+                style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
+              ),
+            ),
+          ],
         ),
       ),
     );
@@ -207,9 +562,8 @@ class SettingsScreen extends StatelessWidget {
     
     showDialog(
       context: context,
-      builder: (dialogCtx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: AppTheme.surfaceCard,
+      builder: (dialogCtx) => _buildGlassDialog(
+        context: dialogCtx,
         child: FutureBuilder<DocumentSnapshot>(
           future: FirebaseFirestore.instance.collection('app_updates').doc('latest').get(),
           builder: (context, snapshot) {
@@ -219,69 +573,80 @@ class SettingsScreen extends StatelessWidget {
               apkUrl = data?['url'] as String? ?? apkUrl;
             }
 
-            return Padding(
-              padding: const EdgeInsets.all(28),
-              child: Column(
-                mainAxisSize: MainAxisSize.min,
-                children: [
-                  Text(
-                    isAr ? 'مشاركة ونشر التطبيق' : 'Share Application',
-                    style: const TextStyle(
-                      fontSize: 20,
-                      fontWeight: FontWeight.bold,
+            return Column(
+              mainAxisSize: MainAxisSize.min,
+              children: [
+                Row(
+                  mainAxisAlignment: MainAxisAlignment.center,
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentAmber.withOpacity(0.15),
+                        shape: BoxShape.circle,
+                      ),
+                      child: Icon(Icons.share_rounded, color: AppTheme.accentAmber, size: 24),
                     ),
-                  ),
-                  const SizedBox(height: 12),
-                  Text(
-                    isAr 
-                        ? 'انقر على الزر أدناه لمشاركة رابط تحميل التطبيق مباشرة:'
-                        : 'Click below to share the application download link directly:',
-                    style: TextStyle(
-                      fontSize: 13,
-                      color: AppTheme.textSecondary,
+                    const SizedBox(width: 10),
+                    Text(
+                      isAr ? 'مشاركة ونشر التطبيق' : 'Share Application',
+                      style: const TextStyle(
+                        fontSize: 18,
+                        fontWeight: FontWeight.bold,
+                      ),
                     ),
-                    textAlign: TextAlign.center,
+                  ],
+                ),
+                const SizedBox(height: 12),
+                Text(
+                  isAr 
+                      ? 'انقر على الزر أدناه لمشاركة رابط تحميل التطبيق مباشرة:'
+                      : 'Click below to share the application download link directly:',
+                  style: TextStyle(
+                    fontSize: 13,
+                    color: AppTheme.textSecondary,
                   ),
-                  const SizedBox(height: 24),
-                  SizedBox(
-                    width: double.infinity,
-                    child: ElevatedButton.icon(
-                      style: ElevatedButton.styleFrom(
-                        backgroundColor: AppTheme.accentAmber,
-                        foregroundColor: AppTheme.surfaceDark,
-                        padding: const EdgeInsets.symmetric(vertical: 14),
-                        shape: RoundedRectangleBorder(
-                          borderRadius: BorderRadius.circular(14),
+                  textAlign: TextAlign.center,
+                ),
+                const SizedBox(height: 24),
+                SizedBox(
+                  width: double.infinity,
+                  child: ElevatedButton.icon(
+                    style: ElevatedButton.styleFrom(
+                      backgroundColor: AppTheme.accentAmber,
+                      foregroundColor: AppTheme.surfaceDark,
+                      padding: const EdgeInsets.symmetric(vertical: 14),
+                      shape: RoundedRectangleBorder(
+                        borderRadius: BorderRadius.circular(14),
+                      ),
+                    ),
+                    icon: const Icon(Icons.share_rounded),
+                    label: Text(
+                      isAr ? 'مشاركة رابط التحميل' : 'Share Download Link',
+                      style: const TextStyle(fontSize: 14, fontWeight: FontWeight.bold),
+                    ),
+                    onPressed: () async {
+                      Navigator.of(dialogCtx).pop();
+                      final message = isAr 
+                          ? 'السلام عليكم، يمكنك تحميل تطبيق TUSSI لإدارة الأقمشة مباشرة من الرابط التالي:\n$apkUrl'
+                          : 'Hello, you can download the TUSSI Fabric Management app directly from this link:\n$apkUrl';
+                      await SharePlus.instance.share(
+                        ShareParams(
+                          text: message,
                         ),
-                      ),
-                      icon: const Icon(Icons.share_rounded),
-                      label: Text(
-                        isAr ? 'مشاركة رابط التحميل' : 'Share Download Link',
-                        style: const TextStyle(fontSize: 14, fontWeight: FontWeight.w600),
-                      ),
-                      onPressed: () async {
-                        Navigator.of(dialogCtx).pop();
-                        final message = isAr 
-                            ? 'السلام عليكم، يمكنك تحميل تطبيق TUSSI لإدارة الأقمشة مباشرة من الرابط التالي:\n$apkUrl'
-                            : 'Hello, you can download the TUSSI Fabric Management app directly from this link:\n$apkUrl';
-                        await SharePlus.instance.share(
-                          ShareParams(
-                            text: message,
-                          ),
-                        );
-                      },
-                    ),
+                      );
+                    },
                   ),
-                  const SizedBox(height: 12),
-                  TextButton(
-                    onPressed: () => Navigator.of(dialogCtx).pop(),
-                    child: Text(
-                      isAr ? 'إغلاق' : 'Close',
-                      style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
-                    ),
+                ),
+                const SizedBox(height: 12),
+                TextButton(
+                  onPressed: () => Navigator.of(dialogCtx).pop(),
+                  child: Text(
+                    isAr ? 'إغلاق' : 'Close',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 13),
                   ),
-                ],
-              ),
+                ),
+              ],
             );
           },
         ),
@@ -295,109 +660,105 @@ class SettingsScreen extends StatelessWidget {
 
     showDialog(
       context: context,
-      builder: (dialogCtx) => Dialog(
-        shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-        backgroundColor: AppTheme.surfaceCard,
-        child: Padding(
-          padding: const EdgeInsets.all(24),
-          child: Column(
-            mainAxisSize: MainAxisSize.min,
-            children: [
-              Container(
-                padding: const EdgeInsets.all(12),
-                decoration: BoxDecoration(
-                  color: AppTheme.accentAmber.withValues(alpha: 0.15),
-                  shape: BoxShape.circle,
-                ),
-                child: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber, size: 32),
+      builder: (dialogCtx) => _buildGlassDialog(
+        context: dialogCtx,
+        child: Column(
+          mainAxisSize: MainAxisSize.min,
+          children: [
+            Container(
+              padding: const EdgeInsets.all(12),
+              decoration: BoxDecoration(
+                color: AppTheme.accentAmber.withOpacity(0.15),
+                shape: BoxShape.circle,
               ),
-              const SizedBox(height: 12),
-              Text(
-                shopName,
-                style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 4),
-              Text(
-                isAr ? 'كود الانضمام للمحل (دعوة العمال)' : 'Shop Join Code (Invite Workers)',
-                style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                textAlign: TextAlign.center,
-              ),
-              const SizedBox(height: 16),
+              child: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber, size: 32),
+            ),
+            const SizedBox(height: 12),
+            Text(
+              shopName,
+              style: const TextStyle(fontSize: 18, fontWeight: FontWeight.bold),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 4),
+            Text(
+              isAr ? 'كود الانضمام للمحل (دعوة العمال)' : 'Shop Join Code (Invite Workers)',
+              style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
+              textAlign: TextAlign.center,
+            ),
+            const SizedBox(height: 16),
 
-              // Code Display Chip with Copy Button
-              Container(
-                padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceElevated,
-                  borderRadius: BorderRadius.circular(14),
-                  border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.4), width: 1.5),
-                ),
-                child: Row(
-                  mainAxisSize: MainAxisSize.min,
-                  children: [
-                    Text(
-                      shopCode,
-                      style: TextStyle(
-                        fontSize: 22,
-                        fontWeight: FontWeight.w900,
-                        letterSpacing: 2,
-                        color: AppTheme.accentAmber,
-                      ),
-                    ),
-                    const SizedBox(width: 12),
-                    InkWell(
-                      onTap: () {
-                        Clipboard.setData(ClipboardData(text: shopCode));
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(content: Text(isAr ? 'تم نسخ كود المحل ✓' : 'Shop code copied ✓')),
-                        );
-                      },
-                      child: Container(
-                        padding: const EdgeInsets.all(6),
-                        decoration: BoxDecoration(
-                          color: AppTheme.accentAmber.withValues(alpha: 0.2),
-                          borderRadius: BorderRadius.circular(8),
-                        ),
-                        child: Icon(Icons.copy_rounded, size: 16, color: AppTheme.accentAmber),
-                      ),
-                    ),
-                  ],
-                ),
+            // Code Display Chip with Copy Button
+            Container(
+              padding: const EdgeInsets.symmetric(horizontal: 16, vertical: 10),
+              decoration: BoxDecoration(
+                color: AppTheme.surfaceElevated,
+                borderRadius: BorderRadius.circular(14),
+                border: Border.all(color: AppTheme.accentAmber.withOpacity(0.4), width: 1.5),
               ),
-              const SizedBox(height: 24),
+              child: Row(
+                mainAxisSize: MainAxisSize.min,
+                children: [
+                  Text(
+                    shopCode,
+                    style: TextStyle(
+                      fontSize: 22,
+                      fontWeight: FontWeight.w900,
+                      letterSpacing: 2,
+                      color: AppTheme.accentAmber,
+                    ),
+                  ),
+                  const SizedBox(width: 12),
+                  InkWell(
+                    onTap: () {
+                      Clipboard.setData(ClipboardData(text: shopCode));
+                      ScaffoldMessenger.of(context).showSnackBar(
+                        SnackBar(content: Text(isAr ? 'تم نسخ كود المحل ✓' : 'Shop code copied ✓')),
+                      );
+                    },
+                    child: Container(
+                      padding: const EdgeInsets.all(6),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentAmber.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(8),
+                      ),
+                      child: Icon(Icons.copy_rounded, size: 16, color: AppTheme.accentAmber),
+                    ),
+                  ),
+                ],
+              ),
+            ),
+            const SizedBox(height: 24),
 
-              // Share Button
-              SizedBox(
-                width: double.infinity,
-                child: ElevatedButton.icon(
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.accentAmber,
-                    foregroundColor: AppTheme.surfaceDark,
-                    padding: const EdgeInsets.symmetric(vertical: 14),
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
-                  ),
-                  icon: const Icon(Icons.share_rounded),
-                  label: Text(
-                    isAr ? 'مشاركة كود المحل عبر WhatsApp' : 'Share Shop Code via WhatsApp',
-                    style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
-                  ),
-                  onPressed: () async {
-                    Navigator.of(dialogCtx).pop();
-                    final message = isAr
-                        ? 'مرحباً، للانضمام إلى محل ($shopName) على تطبيق TUSSI، استخدم كود الانضمام التالي عند التسجيل:\n\n👉 *$shopCode*\n\nرابط تحميل التطبيق: https://tussi.web.app'
-                        : 'Hello, to join ($shopName) on the TUSSI app, use this shop join code when registering:\n\n👉 *$shopCode*\n\nApp link: https://tussi.web.app';
-                    await SharePlus.instance.share(ShareParams(text: message));
-                  },
+            // Share Button
+            SizedBox(
+              width: double.infinity,
+              child: ElevatedButton.icon(
+                style: ElevatedButton.styleFrom(
+                  backgroundColor: AppTheme.accentAmber,
+                  foregroundColor: AppTheme.surfaceDark,
+                  padding: const EdgeInsets.symmetric(vertical: 14),
+                  shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(14)),
                 ),
+                icon: const Icon(Icons.share_rounded),
+                label: Text(
+                  isAr ? 'مشاركة كود المحل عبر WhatsApp' : 'Share Shop Code via WhatsApp',
+                  style: const TextStyle(fontSize: 13, fontWeight: FontWeight.bold),
+                ),
+                onPressed: () async {
+                  Navigator.of(dialogCtx).pop();
+                  final message = isAr
+                      ? 'مرحباً، للانضمام إلى محل ($shopName) على تطبيق TUSSI، استخدم كود الانضمام التالي عند التسجيل:\n\n👉 *$shopCode*\n\nرابط تحميل التطبيق: https://tussi.web.app'
+                      : 'Hello, to join ($shopName) on the TUSSI app, use this shop join code when registering:\n\n👉 *$shopCode*\n\nApp link: https://tussi.web.app';
+                  await SharePlus.instance.share(ShareParams(text: message));
+                },
               ),
-              const SizedBox(height: 8),
-              TextButton(
-                onPressed: () => Navigator.of(dialogCtx).pop(),
-                child: Text(isAr ? 'إغلاق' : 'Close', style: TextStyle(color: AppTheme.textMuted)),
-              ),
-            ],
-          ),
+            ),
+            const SizedBox(height: 8),
+            TextButton(
+              onPressed: () => Navigator.of(dialogCtx).pop(),
+              child: Text(isAr ? 'إغلاق' : 'Close', style: TextStyle(color: AppTheme.textMuted)),
+            ),
+          ],
         ),
       ),
     );
@@ -405,25 +766,17 @@ class SettingsScreen extends StatelessWidget {
 
   @override
   Widget build(BuildContext context) {
-    final themeProvider = context.watch<ThemeProvider>();
-    final languageProvider = context.watch<LanguageProvider>();
-    final firestoreService = FirestoreService();
-    final auth = context.watch<app_auth.AuthProvider>();
-    final shopId = auth.appUser?.shopId ?? '';
+    final themeProvider = Provider.of<ThemeProvider>(context);
     final isAr = context.tr('tab_orders') == 'الطلبيات';
+    final firestoreService = FirestoreService();
+    final auth = Provider.of<app_auth.AuthProvider>(context);
+    final languageProvider = Provider.of<LanguageProvider>(context);
+    final shopId = auth.appUser?.shopId ?? '';
 
     return Scaffold(
-      appBar: isTab
-          ? null
-          : AppBar(
-              title: Text(context.tr('app_settings')),
-              leading: IconButton(
-                icon: const Icon(Icons.arrow_back_ios_rounded),
-                onPressed: () => Navigator.of(context).pop(),
-              ),
-            ),
+      backgroundColor: AppTheme.surfaceDark,
       body: SingleChildScrollView(
-        padding: const EdgeInsets.all(24),
+        padding: const EdgeInsets.symmetric(horizontal: 20, vertical: 20),
         child: Column(
           crossAxisAlignment: CrossAxisAlignment.start,
           children: [
@@ -446,22 +799,22 @@ class SettingsScreen extends StatelessWidget {
                       decoration: BoxDecoration(
                         gradient: LinearGradient(
                           colors: [
-                            AppTheme.accentAmber.withValues(alpha: 0.15),
-                            AppTheme.accentAmber.withValues(alpha: 0.05),
+                            AppTheme.accentAmber.withOpacity(0.18),
+                            AppTheme.surfaceCard,
                           ],
                           begin: Alignment.topLeft,
                           end: Alignment.bottomRight,
                         ),
                         borderRadius: BorderRadius.circular(24),
                         border: Border.all(
-                          color: AppTheme.accentAmber.withValues(alpha: 0.4),
+                          color: AppTheme.accentAmber.withOpacity(0.4),
                           width: 1.5,
                         ),
                         boxShadow: [
                           BoxShadow(
-                            color: AppTheme.accentAmber.withValues(alpha: 0.05),
-                            blurRadius: 15,
-                            spreadRadius: 2,
+                            color: AppTheme.accentAmber.withOpacity(0.08),
+                            blurRadius: 18,
+                            spreadRadius: 1,
                           ),
                         ],
                       ),
@@ -473,7 +826,7 @@ class SettingsScreen extends StatelessWidget {
                               Container(
                                 padding: const EdgeInsets.all(8),
                                 decoration: BoxDecoration(
-                                  color: AppTheme.accentAmber.withValues(alpha: 0.2),
+                                  color: AppTheme.accentAmber.withOpacity(0.2),
                                   shape: BoxShape.circle,
                                 ),
                                 child: Icon(
@@ -539,7 +892,7 @@ class SettingsScreen extends StatelessWidget {
                                 );
                               },
                               icon: const Icon(Icons.file_download_rounded, size: 18),
-                              label: Text(isAr ? 'تنزيل التحديث APK من GitHub 🚀' : 'Download APK from GitHub 🚀'),
+                              label: Text(isAr ? 'تنزيل وتثبيت التحديث مباشرة 🚀' : 'Download & Install APK Directly 🚀'),
                               style: ElevatedButton.styleFrom(
                                 backgroundColor: AppTheme.accentAmber,
                                 foregroundColor: AppTheme.surfaceDark,
@@ -560,112 +913,81 @@ class SettingsScreen extends StatelessWidget {
               },
             ),
 
-            // ─── Group 0: Shop Info & Worker Invite ───────────────
-            if (shopId.isNotEmpty) ...[
-              Text(
-                isAr ? 'بيانات المحل ودعوة العمال' : 'Shop Details & Worker Invite',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.accentAmber,
-                  letterSpacing: 0.5,
-                ),
+            // ─── Hero Shop Card ──────────────────────────────────────
+            if (shopId.isNotEmpty)
+              _buildHeroShopCard(
+                context: context,
+                firestoreService: firestoreService,
+                shopId: shopId,
+                isAr: isAr,
+                userRole: auth.appUser?.role,
               ),
-              const SizedBox(height: 10),
-              StreamBuilder<Map<String, dynamic>?>(
-                stream: firestoreService.streamShopDetails(shopId),
-                builder: (context, snapshot) {
-                  final shopData = snapshot.data;
-                  final shopName = shopData?['name'] as String? ?? (isAr ? 'المحل' : 'My Shop');
-                  final shopCode = shopData?['shopCode'] as String? ?? 'SHOP-0000';
 
-                  return Container(
-                    margin: const EdgeInsets.only(bottom: 24),
-                    padding: const EdgeInsets.all(18),
-                    decoration: BoxDecoration(
-                      color: AppTheme.surfaceCard,
-                      borderRadius: BorderRadius.circular(22),
-                      border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.3)),
-                    ),
-                    child: Column(
-                      children: [
-                        Row(
-                          children: [
-                            Container(
-                              padding: const EdgeInsets.all(10),
-                              decoration: BoxDecoration(
-                                color: AppTheme.accentAmber.withValues(alpha: 0.15),
-                                borderRadius: BorderRadius.circular(14),
-                              ),
-                              child: Icon(Icons.storefront_rounded, color: AppTheme.accentAmber, size: 24),
-                            ),
-                            const SizedBox(width: 14),
-                            Expanded(
-                              child: Column(
-                                crossAxisAlignment: CrossAxisAlignment.start,
-                                children: [
-                                  Text(
-                                    shopName,
-                                    style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                                  ),
-                                  const SizedBox(height: 2),
-                                  Row(
-                                    children: [
-                                      Text(
-                                        '${isAr ? "كود الانضمام" : "Code"}: ',
-                                        style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                                      ),
-                                      Text(
-                                        shopCode,
-                                        style: TextStyle(
-                                          fontSize: 13,
-                                          fontWeight: FontWeight.bold,
-                                          color: AppTheme.accentAmber,
-                                        ),
-                                      ),
-                                    ],
-                                  ),
-                                ],
-                              ),
-                            ),
-                            ElevatedButton.icon(
-                              onPressed: () => _showShopQRCodeModal(context, shopName, shopCode),
-                              icon: const Icon(Icons.vpn_key_rounded, size: 16),
-                              label: Text(isAr ? 'كود المحل' : 'Shop Code'),
-                              style: ElevatedButton.styleFrom(
-                                backgroundColor: AppTheme.accentAmber,
-                                foregroundColor: Colors.black,
-                                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-                                shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                                textStyle: const TextStyle(fontSize: 12, fontWeight: FontWeight.bold),
-                              ),
-                            ),
-                          ],
+            // ─── Section 1: إدارة المحل والأقمشة (Shop & Fabric Operations) ───
+            if (shopId.isNotEmpty && (auth.appUser?.role == 'shop_admin' || auth.appUser?.role == 'shop_employee' || auth.appUser?.email == 'hhcgjvhcnk@gmail.com')) ...[
+              _buildSectionHeader(
+                isAr ? 'إدارة المحل والأقمشة' : 'Shop & Fabric Management',
+                Icons.tune_rounded,
+              ),
+              _buildGlassCard(
+                context: context,
+                child: Column(
+                  children: [
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentAmber.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
                         ),
-                      ],
+                        child: Icon(Icons.settings_suggest_rounded, color: AppTheme.accentAmber, size: 22),
+                      ),
+                      title: Text(
+                        isAr ? 'عمليات التحكم بالقماش السريعة' : 'Fabric Quick Actions',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      subtitle: Text(
+                        isAr ? 'إضافة، تعديل الأسماء والأسعار، وإدارة الوحدات' : 'Add, edit names, prices & units',
+                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                      ),
+                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
+                      onTap: () => _showFabricActionsMenu(context, firestoreService, shopId),
                     ),
-                  );
-                },
+                    const Divider(height: 1, indent: 20, endIndent: 20),
+                    ListTile(
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentAmber.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(Icons.people_alt_rounded, color: AppTheme.accentAmber, size: 22),
+                      ),
+                      title: Text(
+                        isAr ? 'أعضاء المحل وفريق العمل' : 'Shop Members & Team',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      subtitle: Text(
+                        isAr ? 'عرض بيانات المشتركين والموظفين المسجلين' : 'View registered employees & partners',
+                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                      ),
+                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
+                      onTap: () => _showShopInfoBottomSheet(context, firestoreService, shopId),
+                    ),
+                  ],
+                ),
               ),
             ],
 
-            // ─── Group 1: Appearance & Language ─────────────────
-            Text(
-              isAr ? 'المظهر واللغة' : 'Appearance & Language',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.accentAmber,
-                letterSpacing: 0.5,
-              ),
+            // ─── Section 2: المظهر والتخصيص (Appearance & System) ────
+            _buildSectionHeader(
+              isAr ? 'المظهر والتخصيص' : 'Appearance & System',
+              Icons.palette_outlined,
             ),
-            const SizedBox(height: 10),
-            Container(
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceCard,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppTheme.borderSubtle),
-              ),
+            _buildGlassCard(
+              context: context,
               child: Column(
                 children: [
                   Theme(
@@ -987,239 +1309,164 @@ class SettingsScreen extends StatelessWidget {
                 ],
               ),
             ),
-            const SizedBox(height: 16),
 
-            // ─── Help & Guide Tile ──────────────────────────────
-            Container(
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceCard,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppTheme.borderSubtle),
-              ),
-              child: ListTile(
-                contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
-                leading: Icon(
-                  Icons.help_outline_rounded,
-                  color: AppTheme.accentAmber,
-                ),
-                title: Text(
-                  isAr ? 'دليل الاستخدام والتعليمات' : 'User Guide & Instructions',
-                  style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                ),
-                subtitle: Text(
-                  isAr
-                      ? 'شرح تفاعلي بالصور لكافة أزرار ومميزات التطبيق'
-                      : 'Interactive visual guide for all app buttons & features',
-                  style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                ),
-                trailing: Icon(
-                  Icons.arrow_forward_ios_rounded,
-                  color: AppTheme.textMuted,
-                  size: 14,
-                ),
-                onTap: () {
-                  Navigator.of(context).push(
-                    MaterialPageRoute(
-                      builder: (context) => const HelpGuideScreen(),
-                    ),
-                  );
-                },
-              ),
+            // ─── Section 3: المساعدة والتطبيق (Help & Resources) ────
+            _buildSectionHeader(
+              isAr ? 'المساعدة والتطبيق' : 'Help & Application',
+              Icons.help_center_outlined,
             ),
-            const SizedBox(height: 32),
-
-            // ─── Group 2: Shop & Data Management (Admins & Employees) ────
-            if (auth.appUser?.role == 'shop_admin' || auth.appUser?.role == 'shop_employee' || auth.appUser?.email == 'hhcgjvhcnk@gmail.com') ...[
-              Text(
-                isAr ? 'إدارة بيانات المحل' : 'Shop Data Management',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.accentAmber,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceCard,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppTheme.borderSubtle),
-                ),
-                child: Column(
-                  children: [
-                    // Consolidated Fabric Quick Actions
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                      leading: Icon(Icons.settings_suggest_rounded, color: AppTheme.accentAmber),
-                      title: Text(
-                        isAr ? 'عمليات التحكم بالقماش السريعة' : 'Fabric Quick Actions',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                      ),
-                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                      onTap: () => _showFabricActionsMenu(context, firestoreService, shopId),
-                    ),
-                    const Divider(height: 1, indent: 20, endIndent: 20),
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                      leading: Icon(Icons.analytics_rounded, color: AppTheme.accentAmber),
-                      title: Text(
-                        isAr ? 'إحصائيات مبيعات الأقمشة 📊' : 'Fabric Sales Statistics 📊',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                      ),
-                      subtitle: Text(
-                        isAr ? 'عرض الأقمشة المباعة من الأكثر طلباً إلى الأقل' : 'Sold fabrics sorted by popularity',
-                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
-                      ),
-                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                      onTap: () => _showFabricSalesStatsBottomSheet(context, firestoreService, shopId),
-                    ),
-
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-            ],
-
-            // ─── Group 3: Super Admin Panel (Only Developer/Owner Email) ───
-            if (auth.appUser?.email == 'hhcgjvhcnk@gmail.com') ...[
-              Text(
-                isAr ? 'التحكم العام' : 'Global Admin Control',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.accentAmber,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceCard,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppTheme.borderSubtle),
-                ),
-                child: Column(
-                  children: [
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                      leading: Icon(Icons.admin_panel_settings_rounded, color: AppTheme.accentAmber),
-                      title: Text(
-                        isAr ? 'إدارة المحلات وتوليد الأكواد' : 'Manage Shops & Activation Codes',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                      ),
-                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                      onTap: () {
-                        Navigator.of(context).push(
-                          MaterialPageRoute(builder: (_) => const SuperAdminScreen()),
-                        );
-                      },
-                    ),
-                    const Divider(height: 1, indent: 20, endIndent: 20),
-                    ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                      leading: Icon(Icons.system_update_rounded, color: AppTheme.accentAmber),
-                      title: Text(
-                        isAr ? 'نشر تحديث جديد' : 'Publish App Update',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                      ),
-                      trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                      onTap: () => _showPublishUpdateDialog(context, firestoreService),
-                    ),
-                  ],
-                ),
-              ),
-              const SizedBox(height: 32),
-            ],
-
-            // ─── Group 3.5: Shop & Partners Info (For Admins & Employees) ───
-            if (shopId.isNotEmpty) ...[
-              Text(
-                isAr ? 'المحل والشركاء' : 'Shop & Partners',
-                style: TextStyle(
-                  fontSize: 13,
-                  fontWeight: FontWeight.bold,
-                  color: AppTheme.accentAmber,
-                  letterSpacing: 0.5,
-                ),
-              ),
-              const SizedBox(height: 10),
-              Container(
-                decoration: BoxDecoration(
-                  color: AppTheme.surfaceCard,
-                  borderRadius: BorderRadius.circular(24),
-                  border: Border.all(color: AppTheme.borderSubtle),
-                ),
-                child: ListTile(
-                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                  leading: Icon(Icons.people_alt_rounded, color: AppTheme.accentAmber),
-                  title: Text(
-                    isAr ? 'أعضاء المحل وبيانات المشتركين' : 'Shop Members & Partners',
-                    style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
-                  ),
-                  trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                  onTap: () => _showShopInfoBottomSheet(context, firestoreService, shopId),
-                ),
-              ),
-              const SizedBox(height: 32),
-            ],
-
-            // ─── Group 4: Application Info (About App) ───────────
-            Text(
-              isAr ? 'عن التطبيق' : 'About Application',
-              style: TextStyle(
-                fontSize: 13,
-                fontWeight: FontWeight.bold,
-                color: AppTheme.accentAmber,
-                letterSpacing: 0.5,
-              ),
-            ),
-            const SizedBox(height: 10),
-            Container(
-              decoration: BoxDecoration(
-                color: AppTheme.surfaceCard,
-                borderRadius: BorderRadius.circular(24),
-                border: Border.all(color: AppTheme.borderSubtle),
-              ),
+            _buildGlassCard(
+              context: context,
               child: Column(
                 children: [
                   ListTile(
-                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                    leading: Icon(Icons.info_outline_rounded, color: AppTheme.accentAmber),
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentAmber.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.menu_book_rounded, color: AppTheme.accentAmber, size: 22),
+                    ),
                     title: Text(
-                      isAr ? 'تفاصيل التطبيق والمطور' : 'App Details & Developer',
-                      style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                      isAr ? 'دليل الاستخدام والتعليمات' : 'User Guide & Instructions',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    subtitle: Text(
+                      isAr
+                          ? 'شرح تفاعلي بالصور لكافة أزرار ومميزات التطبيق'
+                          : 'Interactive visual guide for all app buttons & features',
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                     ),
                     trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
-                    onTap: () => _showAboutDialog(context),
+                    onTap: () {
+                      Navigator.of(context).push(
+                        MaterialPageRoute(
+                          builder: (context) => const HelpGuideScreen(),
+                        ),
+                      );
+                    },
                   ),
                   if (!kIsWeb) ...[
                     const Divider(height: 1, indent: 20, endIndent: 20),
                     ListTile(
-                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 4),
-                      leading: Icon(Icons.qr_code_2_rounded, color: AppTheme.accentAmber),
+                      contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                      leading: Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentAmber.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(12),
+                        ),
+                        child: Icon(Icons.qr_code_2_rounded, color: AppTheme.accentAmber, size: 22),
+                      ),
                       title: Text(
                         isAr ? 'مشاركة ونشر التطبيق' : 'Share Application',
-                        style: const TextStyle(fontWeight: FontWeight.w600, fontSize: 15),
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                      ),
+                      subtitle: Text(
+                        isAr ? 'مشاركة رابط تحميل النسخة مباشرة مع الشركاء' : 'Share app download link directly',
+                        style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                       ),
                       trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
                       onTap: () => _showShareAppDialog(context),
                     ),
                   ],
+                  const Divider(height: 1, indent: 20, endIndent: 20),
+                  ListTile(
+                    contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                    leading: Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: AppTheme.accentAmber.withOpacity(0.15),
+                        borderRadius: BorderRadius.circular(12),
+                      ),
+                      child: Icon(Icons.info_outline_rounded, color: AppTheme.accentAmber, size: 22),
+                    ),
+                    title: Text(
+                      isAr ? 'تفاصيل التطبيق والمطور' : 'App Details & Developer',
+                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                    ),
+                    subtitle: Text(
+                      isAr ? 'معلومات النظام، الإصدار، وبيانات المطور' : 'System info, version & developer note',
+                      style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                    ),
+                    trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
+                    onTap: () => _showAboutDialog(context),
+                  ),
                 ],
               ),
             ),
 
-            const SizedBox(height: 48),
-            Center(
-              child: Text(
-                'by mohammed bahayou',
-                style: TextStyle(
-                  fontSize: 12,
-                  fontWeight: FontWeight.w500,
-                  color: AppTheme.textMuted,
-                  letterSpacing: 1.2,
+            // ─── Section 4: لوحة المطور والتحكم العام (Super Admin) ────
+            if (auth.appUser?.email == 'hhcgjvhcnk@gmail.com') ...[
+              _buildSectionHeader(
+                isAr ? 'لوحة المطور والتحكم العام' : 'Super Admin Panel',
+                Icons.admin_panel_settings_rounded,
+              ),
+              _buildGlassCard(
+                context: context,
+                child: ListTile(
+                  contentPadding: const EdgeInsets.symmetric(horizontal: 20, vertical: 6),
+                  leading: Container(
+                    padding: const EdgeInsets.all(8),
+                    decoration: BoxDecoration(
+                      color: AppTheme.accentAmber.withOpacity(0.15),
+                      borderRadius: BorderRadius.circular(12),
+                    ),
+                    child: Icon(Icons.system_update_rounded, color: AppTheme.accentAmber, size: 22),
+                  ),
+                  title: Text(
+                    isAr ? 'نشر تحديث جديد' : 'Publish App Update',
+                    style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 15),
+                  ),
+                  subtitle: Text(
+                    isAr ? 'رفع وإعلان تحديث جديد للمستخدمين' : 'Publish a new app update',
+                    style: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                  ),
+                  trailing: Icon(Icons.arrow_forward_ios_rounded, color: AppTheme.textMuted, size: 14),
+                  onTap: () => _showPublishUpdateDialog(context, firestoreService),
                 ),
+              ),
+            ],
+
+            const SizedBox(height: 16),
+            Center(
+              child: Column(
+                children: [
+                  Container(
+                    padding: const EdgeInsets.symmetric(horizontal: 14, vertical: 6),
+                    decoration: BoxDecoration(
+                      color: AppTheme.surfaceCard,
+                      borderRadius: BorderRadius.circular(20),
+                      border: Border.all(
+                        color: Theme.of(context).brightness == Brightness.dark
+                            ? Colors.white.withOpacity(0.08)
+                            : Colors.black.withOpacity(0.06),
+                      ),
+                    ),
+                    child: Text(
+                      'TUSSI • v$_kCurrentVersion',
+                      style: TextStyle(
+                        fontSize: 12,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.accentAmber,
+                        letterSpacing: 1.5,
+                      ),
+                    ),
+                  ),
+                  const SizedBox(height: 8),
+                  Text(
+                    'by mohammed bahayou',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.w500,
+                      color: AppTheme.textMuted,
+                      letterSpacing: 1.2,
+                    ),
+                  ),
+                  const SizedBox(height: 32),
+                ],
               ),
             ),
           ],
@@ -1233,26 +1480,49 @@ class SettingsScreen extends StatelessWidget {
     final isAr = context.tr('tab_orders') == 'الطلبيات';
     showModalBottomSheet(
       context: context,
-      backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      isScrollControlled: true,
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) {
-        return Padding(
-          padding: const EdgeInsets.all(20),
+        return _buildGlassBottomSheet(
+          context: ctx,
           child: Column(
             mainAxisSize: MainAxisSize.min,
             crossAxisAlignment: CrossAxisAlignment.start,
             children: [
+              Center(
+                child: Container(
+                  width: 38,
+                  height: 4,
+                  margin: const EdgeInsets.only(bottom: 14),
+                  decoration: BoxDecoration(
+                    color: AppTheme.textMuted.withOpacity(0.4),
+                    borderRadius: BorderRadius.circular(10),
+                  ),
+                ),
+              ),
               Row(
                 mainAxisAlignment: MainAxisAlignment.spaceBetween,
                 children: [
-                  Text(
-                    isAr ? 'إجراءات القماش السريعة' : 'Fabric Quick Actions',
-                    style: const TextStyle(
-                      fontSize: 18,
-                      fontWeight: FontWeight.bold,
-                    ),
+                  Row(
+                    children: [
+                      Container(
+                        padding: const EdgeInsets.all(8),
+                        decoration: BoxDecoration(
+                          color: AppTheme.accentAmber.withOpacity(0.15),
+                          borderRadius: BorderRadius.circular(10),
+                        ),
+                        child: Icon(Icons.settings_suggest_rounded, color: AppTheme.accentAmber, size: 20),
+                      ),
+                      const SizedBox(width: 10),
+                      Text(
+                        isAr ? 'إجراءات القماش السريعة' : 'Fabric Quick Actions',
+                        style: const TextStyle(
+                          fontSize: 17,
+                          fontWeight: FontWeight.bold,
+                        ),
+                      ),
+                    ],
                   ),
                   IconButton(
                     icon: const Icon(Icons.close_rounded),
@@ -1260,7 +1530,7 @@ class SettingsScreen extends StatelessWidget {
                   ),
                 ],
               ),
-              const SizedBox(height: 16),
+              const SizedBox(height: 12),
               ListTile(
                 leading: Icon(Icons.add_circle_outline_rounded, color: AppTheme.accentAmber),
                 title: Text(
@@ -1332,6 +1602,7 @@ class SettingsScreen extends StatelessWidget {
                   _showDeleteLengthPicker(context, firestoreService, shopId);
                 },
               ),
+              const SizedBox(height: 12),
             ],
           ),
         );
@@ -1352,13 +1623,31 @@ class SettingsScreen extends StatelessWidget {
 
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
-              title: Text(context.tr('add_new_fabric_type')),
-              content: SingleChildScrollView(
+            return _buildGlassDialog(
+              context: context,
+              child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentAmber.withOpacity(0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.add_circle_outline_rounded, color: AppTheme.accentAmber, size: 20),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          context.tr('add_new_fabric_type'),
+                          style: TextStyle(fontSize: 17, fontWeight: FontWeight.bold, color: AppTheme.textPrimary),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 16),
                     TextField(
                       controller: dialogNameController,
                       autofocus: true,
@@ -1373,7 +1662,7 @@ class SettingsScreen extends StatelessWidget {
                         }
                       },
                     ),
-                    const SizedBox(height: 16),
+                    const SizedBox(height: 14),
                     TextField(
                       controller: dialogPriceController,
                       keyboardType: const TextInputType.numberWithOptions(decimal: true),
@@ -1388,16 +1677,16 @@ class SettingsScreen extends StatelessWidget {
                         }
                       },
                     ),
-                    const SizedBox(height: 18),
+                    const SizedBox(height: 16),
                     Text(
                       context.tr('unit_choice'),
                       style: TextStyle(
-                        fontSize: 14,
+                        fontSize: 13,
                         fontWeight: FontWeight.w600,
                         color: AppTheme.textPrimary,
                       ),
                     ),
-                    const SizedBox(height: 8),
+                    const SizedBox(height: 6),
                     RadioListTile<String>(
                       title: Text(context.tr('meter_label')),
                       value: 'meter',
@@ -1438,7 +1727,7 @@ class SettingsScreen extends StatelessWidget {
                       },
                     ),
                     if (validationError != null) ...[
-                      const SizedBox(height: 10),
+                      const SizedBox(height: 8),
                       Text(
                         validationError!,
                         style: TextStyle(
@@ -1448,66 +1737,76 @@ class SettingsScreen extends StatelessWidget {
                         ),
                       ),
                     ],
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: Text(context.tr('cancel'), style: TextStyle(color: AppTheme.textMuted)),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.accentAmber,
+                            foregroundColor: AppTheme.surfaceDark,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          onPressed: () async {
+                            final name = dialogNameController.text.trim();
+                            final priceText = dialogPriceController.text.trim();
+                            if (name.isEmpty) {
+                              setState(() {
+                                validationError = context.tr('fabric_name_required');
+                              });
+                              return;
+                            }
+                            if (priceText.isEmpty) {
+                              setState(() {
+                                validationError = context.tr('fabric_price_required');
+                              });
+                              return;
+                            }
+                            final price = double.tryParse(priceText);
+                            if (price == null || price <= 0) {
+                              setState(() {
+                                validationError = context.tr('invalid_price');
+                              });
+                              return;
+                            }
+                            if (localUnit == null) {
+                              setState(() {
+                                validationError = context.tr('required_unit');
+                              });
+                              return;
+                            }
+                            
+                            try {
+                              await firestoreService.addFabricType(name, localUnit!, price, shopId);
+                              if (context.mounted) {
+                                Navigator.of(ctx).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(isAr ? 'تم إضافة القماش الجديد بنجاح ✓' : 'New fabric added successfully ✓'),
+                                    backgroundColor: AppTheme.successSurface,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              setState(() {
+                                validationError = isAr ? 'حدث خطأ أثناء الإضافة' : 'Error adding fabric: $e';
+                              });
+                            }
+                          },
+                          child: Text(context.tr('add'), style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text(context.tr('cancel')),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final name = dialogNameController.text.trim();
-                    final priceText = dialogPriceController.text.trim();
-                    if (name.isEmpty) {
-                      setState(() {
-                        validationError = context.tr('fabric_name_required');
-                      });
-                      return;
-                    }
-                    if (priceText.isEmpty) {
-                      setState(() {
-                        validationError = context.tr('fabric_price_required');
-                      });
-                      return;
-                    }
-                    final price = double.tryParse(priceText);
-                    if (price == null || price <= 0) {
-                      setState(() {
-                        validationError = context.tr('invalid_price');
-                      });
-                      return;
-                    }
-                    if (localUnit == null) {
-                      setState(() {
-                        validationError = context.tr('required_unit');
-                      });
-                      return;
-                    }
-                    
-                    try {
-                      await firestoreService.addFabricType(name, localUnit!, price, shopId);
-                      if (context.mounted) {
-                        Navigator.of(ctx).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(isAr ? 'تم إضافة القماش الجديد بنجاح ✓' : 'New fabric added successfully ✓'),
-                            backgroundColor: AppTheme.successSurface,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      setState(() {
-                        validationError = isAr ? 'حدث خطأ أثناء الإضافة' : 'Error adding fabric: $e';
-                      });
-                    }
-                  },
-                  child: Text(context.tr('add')),
-                ),
-              ],
             );
           },
         );
@@ -1519,10 +1818,8 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) {
         String searchQuery = '';
         final isAr = context.tr('tab_orders') == 'الطلبيات';
@@ -1537,7 +1834,8 @@ class SettingsScreen extends StatelessWidget {
                   return AppTheme.matchesFuzzy(searchQuery, type.name);
                 }).toList();
 
-                return Padding(
+                return _buildGlassBottomSheet(
+                  context: context,
                   padding: EdgeInsets.only(
                     left: 20,
                     right: 20,
@@ -1611,25 +1909,73 @@ class SettingsScreen extends StatelessWidget {
                                         final controller = TextEditingController(text: type.name);
                                         final newName = await showDialog<String>(
                                           context: context,
-                                          builder: (ctx) => AlertDialog(
-                                            title: Text(isAr ? 'تعديل الاسم' : 'Edit Name'),
-                                            content: TextField(
-                                              controller: controller,
-                                              autofocus: true,
-                                              decoration: InputDecoration(
-                                                hintText: isAr ? 'الاسم الجديد' : 'New name',
-                                              ),
+                                          builder: (ctx) => _buildGlassDialog(
+                                            context: ctx,
+                                            maxWidth: 380,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.all(8),
+                                                      decoration: BoxDecoration(
+                                                        color: AppTheme.accentAmber.withOpacity(0.15),
+                                                        borderRadius: BorderRadius.circular(10),
+                                                      ),
+                                                      child: Icon(Icons.edit_rounded, color: AppTheme.accentAmber, size: 20),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Text(
+                                                      isAr ? 'تعديل الاسم' : 'Edit Name',
+                                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 16),
+                                                TextField(
+                                                  controller: controller,
+                                                  autofocus: true,
+                                                  style: const TextStyle(color: Colors.white),
+                                                  decoration: InputDecoration(
+                                                    hintText: isAr ? 'الاسم الجديد' : 'New name',
+                                                    filled: true,
+                                                    fillColor: Colors.white.withOpacity(0.06),
+                                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withOpacity(0.15))),
+                                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withOpacity(0.15))),
+                                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.accentAmber)),
+                                                  ),
+                                                ),
+                                                const SizedBox(height: 20),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: OutlinedButton(
+                                                        style: OutlinedButton.styleFrom(
+                                                          side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
+                                                        onPressed: () => Navigator.of(ctx).pop(),
+                                                        child: Text(isAr ? 'إلغاء' : 'Cancel', style: const TextStyle(color: Colors.white70)),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: AppTheme.accentAmber,
+                                                          foregroundColor: Colors.black,
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
+                                                        onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
+                                                        child: Text(isAr ? 'حفظ' : 'Save', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
                                             ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.of(ctx).pop(),
-                                                child: Text(isAr ? 'إلغاء' : 'Cancel'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () => Navigator.of(ctx).pop(controller.text.trim()),
-                                                child: Text(isAr ? 'حفظ' : 'Save'),
-                                              ),
-                                            ],
                                           ),
                                         );
                                         if (newName != null && newName.isNotEmpty && newName != type.name) {
@@ -1657,10 +2003,8 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) {
         String searchQuery = '';
         final isAr = context.tr('tab_orders') == 'الطلبيات';
@@ -1675,7 +2019,8 @@ class SettingsScreen extends StatelessWidget {
                   return AppTheme.matchesFuzzy(searchQuery, type.name);
                 }).toList();
 
-                return Padding(
+                return _buildGlassBottomSheet(
+                  context: context,
                   padding: EdgeInsets.only(
                     left: 20,
                     right: 20,
@@ -1755,45 +2100,86 @@ class SettingsScreen extends StatelessWidget {
                                         );
                                         final newPrice = await showDialog<double>(
                                           context: context,
-                                          builder: (dialogCtx) => AlertDialog(
-                                            title: Text(isAr ? 'تعديل سعر قماش' : 'Edit Fabric Price'),
-                                            content: Column(
+                                          builder: (dialogCtx) => _buildGlassDialog(
+                                            context: dialogCtx,
+                                            maxWidth: 380,
+                                            child: Column(
                                               mainAxisSize: MainAxisSize.min,
-                                              crossAxisAlignment: CrossAxisAlignment.start,
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
                                               children: [
+                                                Row(
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.all(8),
+                                                      decoration: BoxDecoration(
+                                                        color: AppTheme.accentAmber.withOpacity(0.15),
+                                                        borderRadius: BorderRadius.circular(10),
+                                                      ),
+                                                      child: Icon(Icons.attach_money_rounded, color: AppTheme.accentAmber, size: 20),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Text(
+                                                      isAr ? 'تعديل سعر قماش' : 'Edit Fabric Price',
+                                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 14),
                                                 Text(
                                                   isAr 
                                                       ? 'أدخل السعر الجديد لقماش "${type.name}":' 
                                                       : 'Enter new price for fabric "${type.name}":',
-                                                  style: const TextStyle(fontSize: 14),
+                                                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                                                 ),
                                                 const SizedBox(height: 12),
                                                 TextField(
                                                   controller: priceController,
                                                   keyboardType: const TextInputType.numberWithOptions(decimal: true),
                                                   autofocus: true,
+                                                  style: const TextStyle(color: Colors.white),
                                                   decoration: InputDecoration(
                                                     suffixText: isAr ? 'د.ج' : 'DA',
+                                                    filled: true,
+                                                    fillColor: Colors.white.withOpacity(0.06),
+                                                    border: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withOpacity(0.15))),
+                                                    enabledBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: Colors.white.withOpacity(0.15))),
+                                                    focusedBorder: OutlineInputBorder(borderRadius: BorderRadius.circular(12), borderSide: BorderSide(color: AppTheme.accentAmber)),
                                                   ),
+                                                ),
+                                                const SizedBox(height: 20),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: OutlinedButton(
+                                                        style: OutlinedButton.styleFrom(
+                                                          side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
+                                                        onPressed: () => Navigator.of(dialogCtx).pop(),
+                                                        child: Text(isAr ? 'إلغاء' : 'Cancel', style: const TextStyle(color: Colors.white70)),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: AppTheme.accentAmber,
+                                                          foregroundColor: Colors.black,
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
+                                                        onPressed: () {
+                                                          final val = double.tryParse(priceController.text);
+                                                          if (val != null && val >= 0) {
+                                                            Navigator.of(dialogCtx).pop(val);
+                                                          }
+                                                        },
+                                                        child: Text(isAr ? 'حفظ' : 'Save', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                      ),
+                                                    ),
+                                                  ],
                                                 ),
                                               ],
                                             ),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.of(dialogCtx).pop(),
-                                                child: Text(isAr ? 'إلغاء' : 'Cancel'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () {
-                                                  final val = double.tryParse(priceController.text);
-                                                  if (val != null && val >= 0) {
-                                                    Navigator.of(dialogCtx).pop(val);
-                                                  }
-                                                },
-                                                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.accentAmber, foregroundColor: AppTheme.surfaceDark),
-                                                child: Text(isAr ? 'حفظ' : 'Save'),
-                                              ),
-                                            ],
                                           ),
                                         );
                                         if (newPrice != null) {
@@ -1821,10 +2207,8 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) {
         String searchQuery = '';
         final isAr = context.tr('tab_orders') == 'الطلبيات';
@@ -1839,7 +2223,8 @@ class SettingsScreen extends StatelessWidget {
                   return AppTheme.matchesFuzzy(searchQuery, type.name);
                 }).toList();
 
-                return Padding(
+                return _buildGlassBottomSheet(
+                  context: context,
                   padding: EdgeInsets.only(
                     left: 20,
                     right: 20,
@@ -1924,21 +2309,40 @@ class SettingsScreen extends StatelessWidget {
                                         final newUnit = await showDialog<String>(
                                           context: context,
                                           builder: (dialogCtx) => StatefulBuilder(
-                                            builder: (ctx, setDialogState) => AlertDialog(
-                                              title: Text(isAr ? 'تعديل وحدة القماش' : 'Edit Fabric Unit'),
-                                              content: Column(
+                                            builder: (ctx, setDialogState) => _buildGlassDialog(
+                                              context: ctx,
+                                              maxWidth: 400,
+                                              child: Column(
                                                 mainAxisSize: MainAxisSize.min,
-                                                crossAxisAlignment: CrossAxisAlignment.start,
+                                                crossAxisAlignment: CrossAxisAlignment.stretch,
                                                 children: [
+                                                  Row(
+                                                    children: [
+                                                      Container(
+                                                        padding: const EdgeInsets.all(8),
+                                                        decoration: BoxDecoration(
+                                                          color: AppTheme.accentAmber.withOpacity(0.15),
+                                                          borderRadius: BorderRadius.circular(10),
+                                                        ),
+                                                        child: Icon(Icons.straighten_rounded, color: AppTheme.accentAmber, size: 20),
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Text(
+                                                        isAr ? 'تعديل وحدة القماش' : 'Edit Fabric Unit',
+                                                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                                                      ),
+                                                    ],
+                                                  ),
+                                                  const SizedBox(height: 12),
                                                   Text(
                                                     isAr
-                                                        ? 'اختر الوحدة الجديدة لقماش "${type.name}":'
-                                                        : 'Select new unit for fabric "${type.name}":',
-                                                    style: const TextStyle(fontSize: 14),
+                                                        ? 'اختر الوحدة لقماش "${type.name}":'
+                                                        : 'Select unit for "${type.name}":',
+                                                    style: TextStyle(color: AppTheme.textSecondary, fontSize: 13),
                                                   ),
                                                   const SizedBox(height: 12),
                                                   RadioListTile<String>(
-                                                    title: Text(context.tr('meter_label')),
+                                                    title: Text(context.tr('meter_label'), style: const TextStyle(color: Colors.white)),
                                                     value: 'meter',
                                                     groupValue: selectedUnit,
                                                     activeColor: AppTheme.accentAmber,
@@ -1948,7 +2352,7 @@ class SettingsScreen extends StatelessWidget {
                                                     },
                                                   ),
                                                   RadioListTile<String>(
-                                                    title: Text(context.tr('kg_label')),
+                                                    title: Text(context.tr('kg_label'), style: const TextStyle(color: Colors.white)),
                                                     value: 'kg',
                                                     groupValue: selectedUnit,
                                                     activeColor: AppTheme.accentAmber,
@@ -1958,7 +2362,7 @@ class SettingsScreen extends StatelessWidget {
                                                     },
                                                   ),
                                                   RadioListTile<String>(
-                                                    title: Text(context.tr('yard_label')),
+                                                    title: Text(context.tr('yard_label'), style: const TextStyle(color: Colors.white)),
                                                     value: 'yard',
                                                     groupValue: selectedUnit,
                                                     activeColor: AppTheme.accentAmber,
@@ -1967,22 +2371,35 @@ class SettingsScreen extends StatelessWidget {
                                                       if (val != null) setDialogState(() => selectedUnit = val);
                                                     },
                                                   ),
+                                                  const SizedBox(height: 16),
+                                                  Row(
+                                                    children: [
+                                                      Expanded(
+                                                        child: OutlinedButton(
+                                                          style: OutlinedButton.styleFrom(
+                                                            side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                          ),
+                                                          onPressed: () => Navigator.of(ctx).pop(),
+                                                          child: Text(isAr ? 'إلغاء' : 'Cancel', style: const TextStyle(color: Colors.white70)),
+                                                        ),
+                                                      ),
+                                                      const SizedBox(width: 10),
+                                                      Expanded(
+                                                        child: ElevatedButton(
+                                                          style: ElevatedButton.styleFrom(
+                                                            backgroundColor: AppTheme.accentAmber,
+                                                            foregroundColor: Colors.black,
+                                                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                          ),
+                                                          onPressed: () => Navigator.of(ctx).pop(selectedUnit),
+                                                          child: Text(isAr ? 'حفظ' : 'Save', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                        ),
+                                                      ),
+                                                    ],
+                                                  ),
                                                 ],
                                               ),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () => Navigator.of(dialogCtx).pop(),
-                                                  child: Text(isAr ? 'إلغاء' : 'Cancel'),
-                                                ),
-                                                ElevatedButton(
-                                                  onPressed: () => Navigator.of(dialogCtx).pop(selectedUnit),
-                                                  style: ElevatedButton.styleFrom(
-                                                    backgroundColor: AppTheme.accentAmber,
-                                                    foregroundColor: AppTheme.surfaceDark,
-                                                  ),
-                                                  child: Text(isAr ? 'حفظ' : 'Save'),
-                                                ),
-                                              ],
                                             ),
                                           ),
                                         );
@@ -2011,10 +2428,8 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) {
         String searchQuery = '';
         final isAr = context.tr('tab_orders') == 'الطلبيات';
@@ -2029,7 +2444,8 @@ class SettingsScreen extends StatelessWidget {
                   return AppTheme.matchesFuzzy(searchQuery, type.name);
                 }).toList();
 
-                return Padding(
+                return _buildGlassBottomSheet(
+                  context: context,
                   padding: EdgeInsets.only(
                     left: 20,
                     right: 20,
@@ -2106,22 +2522,66 @@ class SettingsScreen extends StatelessWidget {
                                       onPressed: () async {
                                         final confirm = await showDialog<bool>(
                                           context: context,
-                                          builder: (ctx) => AlertDialog(
-                                            title: Text(isAr ? 'حذف القماش' : 'Delete Fabric'),
-                                            content: Text(isAr 
-                                                ? 'هل أنت متأكد من حذف نوع القماش "${type.name}" نهائياً؟' 
-                                                : 'Are you sure you want to delete fabric "${type.name}" permanently?'),
-                                            actions: [
-                                              TextButton(
-                                                onPressed: () => Navigator.of(ctx).pop(false),
-                                                child: Text(isAr ? 'إلغاء' : 'Cancel'),
-                                              ),
-                                              ElevatedButton(
-                                                onPressed: () => Navigator.of(ctx).pop(true),
-                                                style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
-                                                child: Text(isAr ? 'حذف' : 'Delete'),
-                                              ),
-                                            ],
+                                          builder: (ctx) => _buildGlassDialog(
+                                            context: ctx,
+                                            maxWidth: 380,
+                                            child: Column(
+                                              mainAxisSize: MainAxisSize.min,
+                                              crossAxisAlignment: CrossAxisAlignment.stretch,
+                                              children: [
+                                                Row(
+                                                  children: [
+                                                    Container(
+                                                      padding: const EdgeInsets.all(8),
+                                                      decoration: BoxDecoration(
+                                                        color: AppTheme.error.withOpacity(0.15),
+                                                        borderRadius: BorderRadius.circular(10),
+                                                      ),
+                                                      child: Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Text(
+                                                      isAr ? 'حذف القماش' : 'Delete Fabric',
+                                                      style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                                                    ),
+                                                  ],
+                                                ),
+                                                const SizedBox(height: 14),
+                                                Text(
+                                                  isAr 
+                                                      ? 'هل أنت متأكد من حذف نوع القماش "${type.name}" نهائياً؟' 
+                                                      : 'Are you sure you want to delete fabric "${type.name}" permanently?',
+                                                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 14, height: 1.4),
+                                                ),
+                                                const SizedBox(height: 20),
+                                                Row(
+                                                  children: [
+                                                    Expanded(
+                                                      child: OutlinedButton(
+                                                        style: OutlinedButton.styleFrom(
+                                                          side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
+                                                        onPressed: () => Navigator.of(ctx).pop(false),
+                                                        child: Text(isAr ? 'إلغاء' : 'Cancel', style: const TextStyle(color: Colors.white70)),
+                                                      ),
+                                                    ),
+                                                    const SizedBox(width: 10),
+                                                    Expanded(
+                                                      child: ElevatedButton(
+                                                        style: ElevatedButton.styleFrom(
+                                                          backgroundColor: AppTheme.error,
+                                                          foregroundColor: Colors.white,
+                                                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                        ),
+                                                        onPressed: () => Navigator.of(ctx).pop(true),
+                                                        child: Text(isAr ? 'حذف' : 'Delete', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                      ),
+                                                    ),
+                                                  ],
+                                                ),
+                                              ],
+                                            ),
                                           ),
                                         );
                                         if (confirm == true) {
@@ -2150,10 +2610,8 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(20)),
-      ),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) {
         String? selectedFabric;
         String searchQuery = '';
@@ -2180,7 +2638,8 @@ class SettingsScreen extends StatelessWidget {
                     return AppTheme.matchesFuzzy(searchQuery, type.name);
                   }).toList();
 
-                  return Padding(
+                  return _buildGlassBottomSheet(
+                    context: context,
                     padding: EdgeInsets.only(
                       left: 20,
                       right: 20,
@@ -2279,7 +2738,8 @@ class SettingsScreen extends StatelessWidget {
                     return str.contains(searchQuery);
                   }).toList();
 
-                  return Padding(
+                  return _buildGlassBottomSheet(
+                    context: context,
                     padding: EdgeInsets.only(
                       left: 20,
                       right: 20,
@@ -2366,23 +2826,67 @@ class SettingsScreen extends StatelessWidget {
                                         onPressed: () async {
                                           final confirm = await showDialog<bool>(
                                             context: context,
-                                            builder: (ctx) => AlertDialog(
-                                              title: Text(isAr ? 'حذف المقاس' : 'Delete Size'),
-                                              content: Text(isAr 
-                                                  ? 'هل أنت متأكد من حذف المقاس "$displayStr" نهائياً لقماش "$selectedFabric"؟' 
-                                                  : 'Are you sure you want to delete size "$displayStr" permanently for "$selectedFabric"?'),
-                                              actions: [
-                                                TextButton(
-                                                  onPressed: () => Navigator.of(ctx).pop(false),
-                                                  child: Text(isAr ? 'إلغاء' : 'Cancel'),
-                                                ),
-                                                ElevatedButton(
-                                                  onPressed: () => Navigator.of(ctx).pop(true),
-                                                  style: ElevatedButton.styleFrom(backgroundColor: AppTheme.error),
-                                                  child: Text(isAr ? 'حذف' : 'Delete'),
-                                                ),
-                                              ],
-                                            ),
+                                             builder: (ctx) => _buildGlassDialog(
+                                               context: ctx,
+                                               maxWidth: 380,
+                                               child: Column(
+                                                 mainAxisSize: MainAxisSize.min,
+                                                 crossAxisAlignment: CrossAxisAlignment.stretch,
+                                                 children: [
+                                                   Row(
+                                                     children: [
+                                                       Container(
+                                                         padding: const EdgeInsets.all(8),
+                                                         decoration: BoxDecoration(
+                                                           color: AppTheme.error.withOpacity(0.15),
+                                                           borderRadius: BorderRadius.circular(10),
+                                                         ),
+                                                         child: Icon(Icons.delete_outline_rounded, color: AppTheme.error, size: 20),
+                                                       ),
+                                                       const SizedBox(width: 10),
+                                                       Text(
+                                                         isAr ? 'ط­ط°ظپ ط§ظ„ظ…ظ‚ط§ط³' : 'Delete Size',
+                                                         style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 16, color: Colors.white),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                   const SizedBox(height: 14),
+                                                   Text(
+                                                     isAr 
+                                                         ? 'ظ‡ظ„ ط£ظ†طھ ظ…طھط£ظƒط¯ ظ…ظ† ط­ط°ظپ ط§ظ„ظ…ظ‚ط§ط³ "$displayStr" ظ†ظ‡ط§ط¦ظٹط§ظ‹ ظ„ظ‚ظ…ط§ط´ "$selectedFabric"طں' 
+                                                         : 'Are you sure you want to delete size "$displayStr" permanently for "$selectedFabric"?',
+                                                     style: TextStyle(color: AppTheme.textSecondary, fontSize: 14, height: 1.4),
+                                                   ),
+                                                   const SizedBox(height: 20),
+                                                   Row(
+                                                     children: [
+                                                       Expanded(
+                                                         child: OutlinedButton(
+                                                           style: OutlinedButton.styleFrom(
+                                                             side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                           ),
+                                                           onPressed: () => Navigator.of(ctx).pop(false),
+                                                           child: Text(isAr ? 'ط¥ظ„ط؛ط§ط،' : 'Cancel', style: const TextStyle(color: Colors.white70)),
+                                                         ),
+                                                       ),
+                                                       const SizedBox(width: 10),
+                                                       Expanded(
+                                                         child: ElevatedButton(
+                                                           style: ElevatedButton.styleFrom(
+                                                             backgroundColor: AppTheme.error,
+                                                             foregroundColor: Colors.white,
+                                                             shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(10)),
+                                                           ),
+                                                           onPressed: () => Navigator.of(ctx).pop(true),
+                                                           child: Text(isAr ? 'ط­ط°ظپ' : 'Delete', style: const TextStyle(fontWeight: FontWeight.bold)),
+                                                         ),
+                                                       ),
+                                                     ],
+                                                   ),
+                                                 ],
+                                               ),
+                                             )
                                           );
                                           if (confirm == true) {
                                             await firestoreService.deleteSavedLengthForFabric(selectedFabric!, len, shopId);
@@ -2492,6 +2996,7 @@ class SettingsScreen extends StatelessWidget {
     final isAr = context.tr('tab_orders') == 'الطلبيات';
     final versionController = TextEditingController();
     final urlController = TextEditingController();
+    final changelogController = TextEditingController();
 
     showDialog(
       context: context,
@@ -2500,26 +3005,33 @@ class SettingsScreen extends StatelessWidget {
 
         return StatefulBuilder(
           builder: (context, setState) {
-            return AlertDialog(
-              backgroundColor: AppTheme.surfaceCard,
-              shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(24)),
-              title: Row(
-                children: [
-                  Icon(Icons.system_update_rounded, color: AppTheme.accentAmber),
-                  const SizedBox(width: 10),
-                  Text(
-                    isAr ? 'نشر تحديث جديد' : 'Publish App Update',
-                    style: TextStyle(color: AppTheme.textPrimary),
-                  ),
-                ],
-              ),
-              content: SingleChildScrollView(
+            return _buildGlassDialog(
+              context: context,
+              child: SingleChildScrollView(
                 child: Column(
                   mainAxisSize: MainAxisSize.min,
                   crossAxisAlignment: CrossAxisAlignment.start,
                   children: [
+                    Row(
+                      children: [
+                        Container(
+                          padding: const EdgeInsets.all(8),
+                          decoration: BoxDecoration(
+                            color: AppTheme.accentAmber.withOpacity(0.15),
+                            shape: BoxShape.circle,
+                          ),
+                          child: Icon(Icons.system_update_rounded, color: AppTheme.accentAmber, size: 22),
+                        ),
+                        const SizedBox(width: 10),
+                        Text(
+                          isAr ? 'نشر تحديث جديد' : 'Publish App Update',
+                          style: TextStyle(color: AppTheme.textPrimary, fontSize: 18, fontWeight: FontWeight.bold),
+                        ),
+                      ],
+                    ),
+                    const SizedBox(height: 18),
                     Text(
-                      isAr ? 'رقم النسخة الجديدة (مثال: 1.1.0):' : 'New Version Name (e.g. 1.1.0):',
+                      isAr ? 'رقم النسخة الجديدة (مثال: 3.0.6):' : 'New Version Name (e.g. 3.0.6):',
                       style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
                     ),
                     const SizedBox(height: 8),
@@ -2527,29 +3039,67 @@ class SettingsScreen extends StatelessWidget {
                       controller: versionController,
                       style: TextStyle(color: AppTheme.textPrimary),
                       decoration: InputDecoration(
-                        hintText: '1.1.0',
+                        hintText: '3.0.6',
                         hintStyle: TextStyle(color: AppTheme.textMuted),
                       ),
-                      onChanged: (_) {
+                      onChanged: (val) {
                         if (errorText != null) setState(() => errorText = null);
+                        if (val.trim().isNotEmpty && urlController.text.isEmpty) {
+                          urlController.text =
+                              'https://github.com/Gt2433/TUSSI/releases/download/v${val.trim()}/app-release.apk';
+                        }
                       },
                     ),
-                    const SizedBox(height: 20),
-                    Text(
-                      isAr ? 'رابط تحميل النسخة (ميقا، فايربيس...):' : 'Download Link (Mega, Firebase...):',
-                      style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                    const SizedBox(height: 14),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.spaceBetween,
+                      children: [
+                        Text(
+                          isAr ? 'رابط تحميل ملف APK المباشر:' : 'Direct APK Download Link:',
+                          style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                        ),
+                        InkWell(
+                          onTap: () {
+                            final ver = versionController.text.trim();
+                            if (ver.isNotEmpty) {
+                              urlController.text =
+                                  'https://github.com/Gt2433/TUSSI/releases/download/v$ver/app-release.apk';
+                              setState(() {});
+                            }
+                          },
+                          child: Text(
+                            isAr ? '🔗 رابط GitHub' : '🔗 GitHub Link',
+                            style: TextStyle(color: AppTheme.accentAmber, fontSize: 11, fontWeight: FontWeight.bold),
+                          ),
+                        ),
+                      ],
                     ),
                     const SizedBox(height: 8),
                     TextField(
                       controller: urlController,
-                      style: TextStyle(color: AppTheme.textPrimary),
+                      style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
                       decoration: InputDecoration(
-                        hintText: 'https://...',
-                        hintStyle: TextStyle(color: AppTheme.textMuted),
+                        hintText: 'https://github.com/Gt2433/TUSSI/releases/download/v3.0.6/app-release.apk',
+                        hintStyle: TextStyle(color: AppTheme.textMuted, fontSize: 12),
                       ),
                       onChanged: (_) {
                         if (errorText != null) setState(() => errorText = null);
                       },
+                    ),
+                    const SizedBox(height: 14),
+                    Text(
+                      isAr ? 'ما الجديد في هذا التحديث (اختياري):' : 'Changelog (Optional):',
+                      style: TextStyle(fontSize: 13, color: AppTheme.textSecondary),
+                    ),
+                    const SizedBox(height: 8),
+                    TextField(
+                      controller: changelogController,
+                      maxLines: 2,
+                      style: TextStyle(color: AppTheme.textPrimary, fontSize: 13),
+                      decoration: InputDecoration(
+                        hintText: isAr ? 'مثال: تحسينات في سرعة البحث، وإضافة شريط التحميل المباشر...' : 'e.g. Performance improvements...',
+                        hintStyle: TextStyle(color: AppTheme.textMuted, fontSize: 12),
+                      ),
                     ),
                     if (errorText != null) ...[
                       const SizedBox(height: 12),
@@ -2558,53 +3108,59 @@ class SettingsScreen extends StatelessWidget {
                         style: TextStyle(color: AppTheme.error, fontSize: 12),
                       ),
                     ],
+                    const SizedBox(height: 20),
+                    Row(
+                      mainAxisAlignment: MainAxisAlignment.end,
+                      children: [
+                        TextButton(
+                          onPressed: () => Navigator.of(ctx).pop(),
+                          child: Text(isAr ? 'إلغاء' : 'Cancel', style: TextStyle(color: AppTheme.textMuted)),
+                        ),
+                        const SizedBox(width: 8),
+                        ElevatedButton(
+                          onPressed: () async {
+                            final version = versionController.text.trim();
+                            final url = urlController.text.trim();
+                            final changelog = changelogController.text.trim();
+
+                            if (version.isEmpty) {
+                              setState(() => errorText = isAr ? 'يرجى كتابة رقم النسخة' : 'Version name is required');
+                              return;
+                            }
+                            if (url.isEmpty || !url.startsWith('http')) {
+                              setState(() => errorText = isAr ? 'يرجى كتابة رابط صحيح يبدأ بـ http' : 'A valid HTTP link is required');
+                              return;
+                            }
+
+                            try {
+                              await firestoreService.publishAppUpdate(version, url, changelog: changelog);
+                              if (context.mounted) {
+                                Navigator.of(ctx).pop();
+                                ScaffoldMessenger.of(context).showSnackBar(
+                                  SnackBar(
+                                    content: Text(isAr ? 'تم نشر التحديث بنجاح' : 'Update published successfully'),
+                                    backgroundColor: AppTheme.successSurface,
+                                    behavior: SnackBarBehavior.floating,
+                                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                                  ),
+                                );
+                              }
+                            } catch (e) {
+                              setState(() => errorText = isAr ? 'حدث خطأ: $e' : 'Error: $e');
+                            }
+                          },
+                          style: ElevatedButton.styleFrom(
+                            backgroundColor: AppTheme.accentAmber,
+                            foregroundColor: AppTheme.surfaceDark,
+                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          ),
+                          child: Text(isAr ? 'نشر الآن' : 'Publish Now', style: const TextStyle(fontWeight: FontWeight.bold)),
+                        ),
+                      ],
+                    ),
                   ],
                 ),
               ),
-              actions: [
-                TextButton(
-                  onPressed: () => Navigator.of(ctx).pop(),
-                  child: Text(isAr ? 'إلغاء' : 'Cancel'),
-                ),
-                ElevatedButton(
-                  onPressed: () async {
-                    final version = versionController.text.trim();
-                    final url = urlController.text.trim();
-
-                    if (version.isEmpty) {
-                      setState(() => errorText = isAr ? 'يرجى كتابة رقم النسخة' : 'Version name is required');
-                      return;
-                    }
-                    if (url.isEmpty || !url.startsWith('http')) {
-                      setState(() => errorText = isAr ? 'يرجى كتابة رابط صحيح يبدأ بـ http' : 'A valid HTTP link is required');
-                      return;
-                    }
-
-                    try {
-                      await firestoreService.publishAppUpdate(version, url);
-                      if (context.mounted) {
-                        Navigator.of(ctx).pop();
-                        ScaffoldMessenger.of(context).showSnackBar(
-                          SnackBar(
-                            content: Text(isAr ? 'تم نشر التحديث بنجاح' : 'Update published successfully'),
-                            backgroundColor: AppTheme.successSurface,
-                            behavior: SnackBarBehavior.floating,
-                            shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                          ),
-                        );
-                      }
-                    } catch (e) {
-                      setState(() => errorText = isAr ? 'حدث خطأ: $e' : 'Error: $e');
-                    }
-                  },
-                  style: ElevatedButton.styleFrom(
-                    backgroundColor: AppTheme.accentAmber,
-                    foregroundColor: AppTheme.surfaceDark,
-                    shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
-                  ),
-                  child: Text(isAr ? 'نشر الآن' : 'Publish Now'),
-                ),
-              ],
             );
           },
         );
@@ -2621,10 +3177,8 @@ class SettingsScreen extends StatelessWidget {
     showModalBottomSheet(
       context: context,
       isScrollControlled: true,
-      backgroundColor: AppTheme.surfaceDark,
-      shape: const RoundedRectangleBorder(
-        borderRadius: BorderRadius.vertical(top: Radius.circular(30)),
-      ),
+      backgroundColor: Colors.transparent,
+      elevation: 0,
       builder: (ctx) {
         return DraggableScrollableSheet(
           initialChildSize: 0.6,
@@ -2632,7 +3186,8 @@ class SettingsScreen extends StatelessWidget {
           maxChildSize: 0.9,
           expand: false,
           builder: (context, scrollController) {
-            return Padding(
+            return _buildGlassBottomSheet(
+              context: context,
               padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 12),
               child: Column(
                 crossAxisAlignment: CrossAxisAlignment.start,
@@ -2846,27 +3401,42 @@ class SettingsScreen extends StatelessWidget {
       context: context,
       builder: (ctx) => StatefulBuilder(
         builder: (context, setDialogState) {
-          return AlertDialog(
-            backgroundColor: AppTheme.surfaceDark,
-            title: Row(
-              children: [
-                Icon(Icons.palette_rounded, color: selectedColor),
-                const SizedBox(width: 10),
-                Text(isAr ? 'إنشاء ثيم خاص' : 'Create Custom Theme'),
-              ],
-            ),
-            content: Column(
+          return _buildGlassDialog(
+            context: context,
+            maxWidth: 440,
+            child: Column(
               mainAxisSize: MainAxisSize.min,
-              crossAxisAlignment: CrossAxisAlignment.start,
+              crossAxisAlignment: CrossAxisAlignment.stretch,
               children: [
+                Row(
+                  children: [
+                    Container(
+                      padding: const EdgeInsets.all(8),
+                      decoration: BoxDecoration(
+                        color: selectedColor.withOpacity(0.2),
+                        borderRadius: BorderRadius.circular(12),
+                        border: Border.all(color: selectedColor.withOpacity(0.4)),
+                      ),
+                      child: Icon(Icons.palette_rounded, color: selectedColor, size: 22),
+                    ),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: Text(
+                        isAr ? 'إنشاء ثيم مخصص' : 'Create Custom Theme',
+                        style: const TextStyle(fontWeight: FontWeight.bold, fontSize: 17, color: Colors.white),
+                      ),
+                    ),
+                  ],
+                ),
+                const SizedBox(height: 18),
                 Text(
                   isAr ? 'اختر اللون الرئيسي للتطبيق:' : 'Select Primary Accent Color:',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
                 ),
                 const SizedBox(height: 12),
                 Wrap(
-                  spacing: 10,
-                  runSpacing: 10,
+                  spacing: 12,
+                  runSpacing: 12,
                   children: colors.map((c) {
                     final isSelected = selectedColor.value == c.value;
                     return GestureDetector(
@@ -2876,21 +3446,21 @@ class SettingsScreen extends StatelessWidget {
                         });
                       },
                       child: Container(
-                        width: 42,
-                        height: 42,
+                        width: 44,
+                        height: 44,
                         decoration: BoxDecoration(
                           color: c,
                           shape: BoxShape.circle,
                           border: Border.all(
-                            color: isSelected ? Colors.white : Colors.transparent,
-                            width: 3,
+                            color: isSelected ? Colors.white : Colors.white24,
+                            width: isSelected ? 3 : 1.5,
                           ),
                           boxShadow: isSelected
-                              ? [BoxShadow(color: c.withOpacity(0.6), blurRadius: 10, spreadRadius: 2)]
+                              ? [BoxShadow(color: c.withOpacity(0.6), blurRadius: 12, spreadRadius: 2)]
                               : [],
                         ),
                         child: isSelected
-                            ? const Icon(Icons.check_rounded, color: Colors.black, size: 22)
+                            ? const Icon(Icons.check_rounded, color: Colors.black, size: 24)
                             : null,
                       ),
                     );
@@ -2899,9 +3469,9 @@ class SettingsScreen extends StatelessWidget {
                 const SizedBox(height: 20),
                 Text(
                   isAr ? 'اختر خلفية التطبيق:' : 'Select Background Mode:',
-                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.bold),
+                  style: TextStyle(color: AppTheme.textSecondary, fontSize: 13, fontWeight: FontWeight.w600),
                 ),
-                const SizedBox(height: 8),
+                const SizedBox(height: 10),
                 Row(
                   children: [
                     Expanded(
@@ -2933,261 +3503,46 @@ class SettingsScreen extends StatelessWidget {
                     ),
                   ],
                 ),
-              ],
-            ),
-            actions: [
-              TextButton(
-                onPressed: () => Navigator.of(ctx).pop(),
-                child: Text(isAr ? 'إلغاء' : 'Cancel'),
-              ),
-              ElevatedButton(
-                style: ElevatedButton.styleFrom(
-                  backgroundColor: selectedColor,
-                  foregroundColor: selectedIsDark ? Colors.black : Colors.white,
-                ),
-                onPressed: () {
-                  Navigator.of(ctx).pop();
-                  themeProvider.setCustomTheme(
-                    primaryColor: selectedColor,
-                    isDark: selectedIsDark,
-                  );
-                },
-                child: Text(isAr ? 'تطبيق الثيم' : 'Apply Theme'),
-              ),
-            ],
-          );
-        },
-      ),
-    );
-  }
-
-  void _showFabricSalesStatsBottomSheet(BuildContext context, FirestoreService firestoreService, String shopId) {
-    final isAr = context.tr('tab_orders') == 'الطلبيات';
-
-    showModalBottomSheet(
-      context: context,
-      isScrollControlled: true,
-      backgroundColor: Colors.transparent,
-      builder: (ctx) {
-        return Container(
-          height: MediaQuery.of(ctx).size.height * 0.75,
-          decoration: BoxDecoration(
-            color: AppTheme.surfaceCard,
-            borderRadius: const BorderRadius.vertical(top: Radius.circular(28)),
-            border: Border.all(color: AppTheme.borderSubtle),
-          ),
-          child: Column(
-            children: [
-              // Handle bar
-              Center(
-                child: Container(
-                  margin: const EdgeInsets.only(top: 12, bottom: 8),
-                  width: 40,
-                  height: 4,
-                  decoration: BoxDecoration(
-                    color: AppTheme.textMuted.withOpacity(0.3),
-                    borderRadius: BorderRadius.circular(2),
-                  ),
-                ),
-              ),
-              // Header
-              Padding(
-                padding: const EdgeInsets.symmetric(horizontal: 24, vertical: 10),
-                child: Row(
+                const SizedBox(height: 24),
+                Row(
                   children: [
-                    Container(
-                      padding: const EdgeInsets.all(10),
-                      decoration: BoxDecoration(
-                        color: AppTheme.accentAmber.withOpacity(0.15),
-                        borderRadius: BorderRadius.circular(14),
-                      ),
-                      child: Icon(Icons.analytics_rounded, color: AppTheme.accentAmber, size: 24),
-                    ),
-                    const SizedBox(width: 14),
                     Expanded(
-                      child: Column(
-                        crossAxisAlignment: CrossAxisAlignment.start,
-                        children: [
-                          Text(
-                            isAr ? 'إحصائيات مبيعات الأقمشة 📊' : 'Fabric Sales Statistics 📊',
-                            style: const TextStyle(fontSize: 17, fontWeight: FontWeight.bold),
-                          ),
-                          const SizedBox(height: 2),
-                          Text(
-                            isAr ? 'يتم احتساب القماش فور إرسال الطلبية فقط' : 'Counted only after sending orders',
-                            style: TextStyle(fontSize: 12, color: AppTheme.textMuted),
-                          ),
-                        ],
+                      child: OutlinedButton(
+                        style: OutlinedButton.styleFrom(
+                          side: BorderSide(color: Colors.white.withOpacity(0.2)),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () => Navigator.of(ctx).pop(),
+                        child: Text(isAr ? 'إلغاء' : 'Cancel', style: const TextStyle(color: Colors.white70)),
                       ),
                     ),
-                    IconButton(
-                      icon: const Icon(Icons.close_rounded),
-                      onPressed: () => Navigator.of(ctx).pop(),
+                    const SizedBox(width: 12),
+                    Expanded(
+                      child: ElevatedButton(
+                        style: ElevatedButton.styleFrom(
+                          backgroundColor: selectedColor,
+                          foregroundColor: selectedIsDark ? Colors.black : Colors.white,
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.symmetric(vertical: 12),
+                        ),
+                        onPressed: () {
+                          Navigator.of(ctx).pop();
+                          themeProvider.setCustomTheme(
+                            primaryColor: selectedColor,
+                            isDark: selectedIsDark,
+                          );
+                        },
+                        child: Text(isAr ? 'تطبيق الثيم' : 'Apply Theme', style: const TextStyle(fontWeight: FontWeight.bold)),
+                      ),
                     ),
                   ],
                 ),
-              ),
-              const Divider(height: 1),
-              // Content
-              Expanded(
-                child: StreamBuilder<Map<String, int>>(
-                  stream: firestoreService.streamFabricSalesStats(shopId),
-                  builder: (context, snapshot) {
-                    if (snapshot.connectionState == ConnectionState.waiting) {
-                      return const Center(child: CircularProgressIndicator());
-                    }
-
-                    final Map<String, int> stats = snapshot.data ?? {};
-                    // Filter out fabrics with <= 0 sales or empty names
-                    final salesList = stats.entries
-                        .where((e) => e.key.trim().isNotEmpty && e.value > 0)
-                        .toList();
-
-                    // Sort descending from highest sales to lowest
-                    salesList.sort((a, b) => b.value.compareTo(a.value));
-
-                    if (salesList.isEmpty) {
-                      return Center(
-                        child: Padding(
-                          padding: const EdgeInsets.all(32.0),
-                          child: Column(
-                            mainAxisAlignment: MainAxisAlignment.center,
-                            children: [
-                              Icon(Icons.inventory_2_outlined, size: 64, color: AppTheme.textMuted.withOpacity(0.4)),
-                              const SizedBox(height: 16),
-                              Text(
-                                isAr ? 'لا توجد أقمشة مباعة حتى الآن' : 'No sold fabrics yet',
-                                style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
-                              ),
-                              const SizedBox(height: 8),
-                              Text(
-                                isAr ? 'يتم احتساب القماش بمقدار +1 تلقائياً بعد إرسال الطلبية 🚀' : 'Fabrics get +1 count automatically upon sending orders 🚀',
-                                textAlign: TextAlign.center,
-                                style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
-                              ),
-                            ],
-                          ),
-                        ),
-                      );
-                    }
-
-                    final totalSales = salesList.fold<int>(0, (sum, item) => sum + item.value);
-
-                    return ListView.separated(
-                      padding: const EdgeInsets.all(20),
-                      itemCount: salesList.length,
-                      separatorBuilder: (_, __) => const SizedBox(height: 12),
-                      itemBuilder: (context, index) {
-                        final entry = salesList[index];
-                        final fabricName = entry.key;
-                        final count = entry.value;
-                        final percentage = totalSales > 0 ? (count / totalSales * 100).toStringAsFixed(1) : '0';
-
-                        String rankBadge;
-                        Color rankColor;
-                        if (index == 0) {
-                          rankBadge = '🥇';
-                          rankColor = const Color(0xFFFFD700);
-                        } else if (index == 1) {
-                          rankBadge = '🥈';
-                          rankColor = const Color(0xFFC0C0C0);
-                        } else if (index == 2) {
-                          rankBadge = '🥉';
-                          rankColor = const Color(0xFFCD7F32);
-                        } else {
-                          rankBadge = '#${index + 1}';
-                          rankColor = AppTheme.textMuted;
-                        }
-
-                        return Container(
-                          padding: const EdgeInsets.all(16),
-                          decoration: BoxDecoration(
-                            color: AppTheme.surfaceCard,
-                            borderRadius: BorderRadius.circular(16),
-                            border: Border.all(
-                              color: index == 0 ? AppTheme.accentAmber.withOpacity(0.5) : AppTheme.borderSubtle,
-                              width: index == 0 ? 1.5 : 1.0,
-                            ),
-                          ),
-                          child: Column(
-                            crossAxisAlignment: CrossAxisAlignment.start,
-                            children: [
-                              Row(
-                                children: [
-                                  Container(
-                                    width: 36,
-                                    height: 36,
-                                    alignment: Alignment.center,
-                                    decoration: BoxDecoration(
-                                      color: rankColor.withOpacity(0.15),
-                                      shape: BoxShape.circle,
-                                    ),
-                                    child: Text(
-                                      rankBadge,
-                                      style: TextStyle(
-                                        fontSize: index < 3 ? 18 : 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: rankColor,
-                                      ),
-                                    ),
-                                  ),
-                                  const SizedBox(width: 14),
-                                  Expanded(
-                                    child: Text(
-                                      fabricName,
-                                      style: const TextStyle(
-                                        fontSize: 16,
-                                        fontWeight: FontWeight.bold,
-                                      ),
-                                    ),
-                                  ),
-                                  Container(
-                                    padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 6),
-                                    decoration: BoxDecoration(
-                                      color: AppTheme.accentAmber.withOpacity(0.15),
-                                      borderRadius: BorderRadius.circular(20),
-                                    ),
-                                    child: Text(
-                                      isAr ? '$count مرة بيع' : '$count Sales',
-                                      style: TextStyle(
-                                        fontSize: 13,
-                                        fontWeight: FontWeight.bold,
-                                        color: AppTheme.accentAmber,
-                                      ),
-                                    ),
-                                  ),
-                                ],
-                              ),
-                              const SizedBox(height: 12),
-                              ClipRRect(
-                                borderRadius: BorderRadius.circular(6),
-                                child: LinearProgressIndicator(
-                                  value: totalSales > 0 ? count / totalSales : 0,
-                                  backgroundColor: AppTheme.borderSubtle.withOpacity(0.3),
-                                  color: index == 0 ? AppTheme.accentAmber : Colors.blueAccent,
-                                  minHeight: 6,
-                                ),
-                              ),
-                              const SizedBox(height: 6),
-                              Align(
-                                alignment: Alignment.centerLeft,
-                                child: Text(
-                                  '$percentage% من إجمالي المبيعات',
-                                  style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
-                                ),
-                              ),
-                            ],
-                          ),
-                        );
-                      },
-                    );
-                  },
-                ),
-              ),
-            ],
-          ),
-        );
-      },
+              ],
+            ),
+          );
+        },
+      ),
     );
   }
 }

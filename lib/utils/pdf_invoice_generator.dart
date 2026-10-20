@@ -188,41 +188,13 @@ class PdfInvoiceGenerator {
                     child: pw.Column(
                       crossAxisAlignment: pw.CrossAxisAlignment.start,
                       children: [
-                        pw.Text('RÉSUMÉ DU PAIEMENT', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
+                        pw.Text('OBSERVATION / REMARQUE', style: pw.TextStyle(fontSize: 10, fontWeight: pw.FontWeight.bold)),
                         pw.Divider(color: PdfColors.grey300),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Statut:', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                            pw.Text(
-                              order.paymentStatus == 'paid'
-                                  ? 'PAYÉ'
-                                  : (order.paymentStatus == 'partial' ? 'PARTIEL' : 'NON PAYÉ'),
-                              style: pw.TextStyle(
-                                fontSize: 9,
-                                fontWeight: pw.FontWeight.bold,
-                                color: order.paymentStatus == 'paid'
-                                    ? PdfColors.green700
-                                    : (order.paymentStatus == 'partial' ? PdfColors.orange700 : PdfColors.red700),
-                              ),
-                            ),
-                          ],
-                        ),
-                        pw.SizedBox(height: 4),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Montant Payé:', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                            pw.Text('${priceFormat.format(order.paidAmount ?? 0)} DA', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: PdfColors.green700)),
-                          ],
-                        ),
-                        pw.SizedBox(height: 4),
-                        pw.Row(
-                          mainAxisAlignment: pw.MainAxisAlignment.spaceBetween,
-                          children: [
-                            pw.Text('Reste à Payer:', style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey700)),
-                            pw.Text('${priceFormat.format(order.balanceDue)} DA', style: pw.TextStyle(fontSize: 9, fontWeight: pw.FontWeight.bold, color: order.balanceDue > 0 ? PdfColors.red700 : PdfColors.green700)),
-                          ],
+                        pw.Text(
+                          (order.note != null && order.note!.trim().isNotEmpty)
+                              ? order.note!
+                              : 'Aucune observation.',
+                          style: const pw.TextStyle(fontSize: 9, color: PdfColors.grey800),
                         ),
                       ],
                     ),

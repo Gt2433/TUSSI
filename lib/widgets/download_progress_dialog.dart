@@ -100,10 +100,24 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
   Future<void> _startDownload() async {
     try {
       final client = http.Client();
-      final request = http.Request('GET', Uri.parse(widget.updateUrl));
-      final response = await client.send(request);
+      var uri = Uri.parse(widget.updateUrl);
+      var request = http.Request('GET', uri)..followRedirects = true;
+      var response = await client.send(request);
 
-      if (response.statusCode == 200 || response.statusCode == 302) {
+      // Handle HTTP redirects (GitHub Releases redirect to AWS S3)
+      if (response.statusCode == 301 ||
+          response.statusCode == 302 ||
+          response.statusCode == 307 ||
+          response.statusCode == 308) {
+        final redirectLocation = response.headers['location'];
+        if (redirectLocation != null && redirectLocation.isNotEmpty) {
+          uri = Uri.parse(redirectLocation);
+          request = http.Request('GET', uri)..followRedirects = true;
+          response = await client.send(request);
+        }
+      }
+
+      if (response.statusCode == 200) {
         final contentLength = response.contentLength ?? 0;
         int receivedBytes = 0;
         List<int> bytes = [];
@@ -123,9 +137,13 @@ class _DownloadProgressDialogState extends State<DownloadProgressDialog> {
                   _progress = (receivedBytes / estimatedTotal).clamp(0.0, 0.95);
                 }
                 final percent = (_progress * 100).toInt();
+                final mbDownloaded = (receivedBytes / (1024 * 1024)).toStringAsFixed(1);
+                final mbTotal = contentLength > 0
+                    ? (contentLength / (1024 * 1024)).toStringAsFixed(1)
+                    : '~50';
                 _statusMessage = widget.isAr
-                    ? 'جاري تنزيل التحديث ($percent%)'
-                    : 'Downloading update ($percent%)';
+                    ? 'جاري تنزيل التحديث ($percent% - $mbDownloaded / $mbTotal MB)'
+                    : 'Downloading update ($percent% - $mbDownloaded / $mbTotal MB)';
               });
             }
           },

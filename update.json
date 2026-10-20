@@ -1,7 +1,7 @@
 {
-  "version": "3.0.5",
-  "url": "https://github.com/Gt2433/TUSSI/releases/download/v3.0.5/app-release.apk",
-  "downloadUrl": "https://github.com/Gt2433/TUSSI/releases/download/v3.0.5/app-release.apk",
-  "changelog": "تحديث 3.0.5: دمج ونقل الأقمشة بين الطلبيات 🔀، وحساب جزئي للأسطوانات والأمتار بنقرة واحدة 🧮.",
+  "version": "4.0.0",
+  "url": "https://github.com/Gt2433/TUSSI/releases/download/v4.0.0/app-release.apk",
+  "downloadUrl": "https://github.com/Gt2433/TUSSI/releases/download/v4.0.0/app-release.apk",
+  "changelog": "تحديث v4.0.0: نظام الملاحظات المكتوبة لكل طلبية، شريط علوي موحد، وتحسينات عامة على الأداء والمظهر.",
   "forceUpdate": false
 }

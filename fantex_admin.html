@@ -1280,9 +1280,11 @@ function OrdersTab({ db, fb }) {
   const [shops, setShops] = useState([]);
   const [warehouses, setWarehouses] = useState([]);
   const [users, setUsers] = useState([]);
+  const [searchQuery, setSearchQuery] = useState("");
+  const [startDate, setStartDate] = useState("");
+  const [endDate, setEndDate] = useState("");
   const [filter, setFilter] = useState("all");
   const [filterShop, setFilterShop] = useState("");
-  const [filterDate, setFilterDate] = useState("");
 
   useEffect(() => {
     if (!db || !fb) return;
@@ -1299,32 +1301,103 @@ function OrdersTab({ db, fb }) {
     let match = true;
     if (filter !== "all" && o.status !== filter) match = false;
     if (filterShop && o.shopId !== filterShop) match = false;
-    if (filterDate && o.createdAt) {
-      const d = o.createdAt.toDate ? o.createdAt.toDate() : new Date(o.createdAt);
-      const fd = new Date(filterDate);
-      if (d.toDateString() !== fd.toDateString()) match = false;
+
+    // Search query: customer name OR fabric name OR receipt/id
+    if (searchQuery.trim()) {
+      const q = searchQuery.trim().toLowerCase();
+      const custMatch = (o.customerName || '').toLowerCase().includes(q);
+      const fabricMatch = (o.fabrics || o.items || []).some(f => 
+        (f.fabricType || f.fabricName || f.name || '').toLowerCase().includes(q)
+      );
+      const idMatch = (o.receiptNumber || o.id || '').toLowerCase().includes(q);
+      if (!custMatch && !fabricMatch && !idMatch) match = false;
     }
+
+    // Date range filter
+    const orderDate = o.completedAt || o.createdAt;
+    if (orderDate) {
+      const d = orderDate.toDate ? orderDate.toDate() : new Date(orderDate);
+      if (startDate) {
+        const s = new Date(startDate);
+        s.setHours(0, 0, 0, 0);
+        if (d < s) match = false;
+      }
+      if (endDate) {
+        const e = new Date(endDate);
+        e.setHours(23, 59, 59, 999);
+        if (d > e) match = false;
+      }
+    }
+
     return match;
   });
 
+  const resetFilters = () => {
+    setSearchQuery("");
+    setStartDate("");
+    setEndDate("");
+    setFilter("all");
+    setFilterShop("");
+  };
+
   return (
     <div className="space-y-6 fade-in">
-      <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>جميع الطلبيات</h2>
+      <div className="flex items-center justify-between">
+        <h2 className="text-2xl font-bold" style={{ color: 'var(--text-primary)' }}>جميع الطلبيات</h2>
+        <span className="text-xs px-3 py-1 rounded-lg" style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}>
+          {filtered.length} من {orders.length} طلبية
+        </span>
+      </div>
+
       <div className="glass rounded-2xl p-4 space-y-3" style={{ borderColor: 'var(--accent-color)' }}>
-        <div className="grid md:grid-cols-3 gap-3">
-          <select value={filter} onChange={e => setFilter(e.target.value)} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
-            <option value="all">جميع الحالات</option>
-            <option value="pending">⏳ قيد الانتظار</option>
-            <option value="approved">✅ مقبولة</option>
-            <option value="delivered">📦 تم التسليم</option>
-          </select>
-          <select value={filterShop} onChange={e => setFilterShop(e.target.value)} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
-            <option value="">جميع المحلات</option>
-            {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
-          </select>
-          <input type="date" value={filterDate} onChange={e => setFilterDate(e.target.value)} className="rounded-xl px-4 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+        <div className="relative">
+          <input
+            type="text"
+            value={searchQuery}
+            onChange={e => setSearchQuery(e.target.value)}
+            placeholder="🔍 بحث باسم الزبون أو اسم القماش أو رقم الطلب..."
+            className="w-full rounded-xl px-4 py-2.5 text-sm"
+            style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}
+          />
+          {searchQuery && (
+            <button onClick={() => setSearchQuery("")} className="absolute left-3 top-1/2 -translate-y-1/2 text-xs" style={{ color: 'var(--text-muted)' }}>
+              ✕
+            </button>
+          )}
         </div>
-        <button onClick={() => { setFilter("all"); setFilterShop(""); setFilterDate(""); }} className="px-4 py-2 rounded-lg text-sm transition-all" style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}>إعادة تعيين</button>
+
+        <div className="grid md:grid-cols-4 gap-3">
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>📅 من تاريخ:</label>
+            <input type="date" value={startDate} onChange={e => setStartDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>📅 إلى تاريخ:</label>
+            <input type="date" value={endDate} onChange={e => setEndDate(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }} />
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>📌 الحالة:</label>
+            <select value={filter} onChange={e => setFilter(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
+              <option value="all">جميع الحالات</option>
+              <option value="pending">⏳ قيد الانتظار</option>
+              <option value="approved">✅ مقبولة</option>
+              <option value="delivered">📦 تم التسليم</option>
+            </select>
+          </div>
+          <div>
+            <label className="text-xs block mb-1" style={{ color: 'var(--text-muted)' }}>🏪 المحل:</label>
+            <select value={filterShop} onChange={e => setFilterShop(e.target.value)} className="w-full rounded-xl px-3 py-2 text-sm" style={{ background: 'var(--bg-input)', border: '1px solid var(--border-color)', color: 'var(--text-primary)' }}>
+              <option value="">جميع المحلات</option>
+              {shops.map(s => <option key={s.id} value={s.id}>{s.name}</option>)}
+            </select>
+          </div>
+        </div>
+
+        <div className="flex justify-end">
+          <button onClick={resetFilters} className="px-4 py-1.5 rounded-lg text-xs font-medium transition-all" style={{ background: 'var(--bg-input)', color: 'var(--text-secondary)' }}>
+            🔄 إعادة تعيين الفلاتر
+          </button>
+        </div>
       </div>
       <div className="space-y-3">
         {filtered.length === 0 ? <p className="text-center py-12" style={{ color: 'var(--text-muted)' }}>لا توجد طلبيات</p> : (

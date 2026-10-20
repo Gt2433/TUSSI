@@ -10,8 +10,6 @@ import 'package:audioplayers/audioplayers.dart';
 import '../providers/language_provider.dart';
 import '../providers/auth_provider.dart' as app_auth;
 import '../services/firestore_service.dart';
-import '../providers/order_provider.dart';
-import '../utils/payment_dialog.dart';
 import 'quick_subtotal_dialog.dart';
 
 /// Card widget displaying a complete order with fabric entries,
@@ -339,19 +337,33 @@ class OrderCard extends StatelessWidget {
               if (order.voiceNoteBase64 != null && order.voiceNoteBase64!.isNotEmpty)
                 OrderVoiceNotePlayer(base64String: order.voiceNoteBase64!),
 
-              // ─── Payment Status Bar ──────────────────────────────
+              // ─── Order Note Section ──────────────────────────────
               if (!order.isDraft) ...[
                 const SizedBox(height: 12),
-                _PaymentStatusBar(order: order),
+                _OrderNoteSection(order: order),
               ],
             ],
 
-            // ─── Done/Resume/Recall/Merge Buttons ─────────────────────
-            if (showDoneButton || onResume != null) ...[
+            // ─── Done/Resume/Recall/Merge/Delete Buttons ─────────────────────
+            if (showDoneButton || onResume != null || onDelete != null) ...[
               const SizedBox(height: 16),
               Row(
                 children: [
                   if (!showStatus && order.status == 'pending') ...[
+                    if (onDelete != null) ...[
+                      IconButton(
+                        icon: const Icon(Icons.delete_outline_rounded, size: 20),
+                        color: AppTheme.error,
+                        tooltip: isAr ? 'حذف الطلبية' : 'Delete Order',
+                        style: IconButton.styleFrom(
+                          backgroundColor: AppTheme.error.withValues(alpha: 0.15),
+                          shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                          padding: const EdgeInsets.all(10),
+                        ),
+                        onPressed: onDelete,
+                      ),
+                      const SizedBox(width: 8),
+                    ],
                     IconButton(
                       icon: const Icon(Icons.merge_type_rounded, size: 20),
                       color: AppTheme.accentAmber,
@@ -434,41 +446,121 @@ class OrderCard extends StatelessWidget {
   }
 }
 
-// ─── Payment Status Bar ───────────────────────────────────────────────────
-class _PaymentStatusBar extends StatelessWidget {
+// ─── Order Note Section ───────────────────────────────────────────────────
+class _OrderNoteSection extends StatelessWidget {
   final Order order;
-  const _PaymentStatusBar({required this.order});
+  const _OrderNoteSection({required this.order});
+
+  void _showEditNoteDialog(BuildContext context) {
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+    final controller = TextEditingController(text: order.note ?? '');
+
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        backgroundColor: AppTheme.surfaceDark,
+        shape: RoundedRectangleBorder(
+          borderRadius: BorderRadius.circular(16),
+          side: BorderSide(color: AppTheme.borderSubtle),
+        ),
+        title: Row(
+          children: [
+            Container(
+              padding: const EdgeInsets.all(8),
+              decoration: BoxDecoration(
+                color: AppTheme.accentAmber.withValues(alpha: 0.15),
+                borderRadius: BorderRadius.circular(10),
+              ),
+              child: Icon(Icons.note_alt_rounded, color: AppTheme.accentAmber, size: 20),
+            ),
+            const SizedBox(width: 10),
+            Text(
+              isAr ? 'ملاحظة الطلبية' : 'Order Note',
+              style: const TextStyle(fontSize: 16, fontWeight: FontWeight.bold),
+            ),
+          ],
+        ),
+        content: TextField(
+          controller: controller,
+          maxLines: 4,
+          minLines: 2,
+          autofocus: true,
+          style: const TextStyle(fontSize: 14),
+          decoration: InputDecoration(
+            hintText: isAr ? 'اكتب ملاحظة أو توجيهات لهذه الطلبية...' : 'Write notes or instructions for this order...',
+            border: OutlineInputBorder(
+              borderRadius: BorderRadius.circular(12),
+              borderSide: BorderSide(color: AppTheme.borderSubtle),
+            ),
+          ),
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.pop(ctx),
+            child: Text(isAr ? 'إلغاء' : 'Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              final newNote = controller.text.trim();
+              Navigator.pop(ctx);
+              await FirestoreService().updateOrderNote(
+                orderId: order.id,
+                note: newNote,
+              );
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.accentAmber,
+              foregroundColor: AppTheme.surfaceDark,
+            ),
+            child: Text(isAr ? 'حفظ الملاحظة' : 'Save Note'),
+          ),
+        ],
+      ),
+    );
+  }
 
   @override
   Widget build(BuildContext context) {
     final isAr = context.tr('tab_orders') == 'الطلبيات';
-    final total = order.computedTotal;
-    final paid = order.paidAmount ?? 0.0;
-    final balance = order.balanceDue;
-    final progress = total > 0 ? (paid / total).clamp(0.0, 1.0) : 0.0;
+    final hasNote = order.note != null && order.note!.trim().isNotEmpty;
 
-    Color statusColor;
-    String statusLabel;
-    switch (order.paymentStatus) {
-      case 'paid':
-        statusColor = AppTheme.success;
-        statusLabel = isAr ? 'مدفوع ✅' : 'Paid ✅';
-        break;
-      case 'partial':
-        statusColor = Colors.orange;
-        statusLabel = isAr ? 'دفع جزئي 🔶' : 'Partial 🔶';
-        break;
-      default:
-        statusColor = AppTheme.error;
-        statusLabel = isAr ? 'لم يُدفع ❌' : 'Unpaid ❌';
+    if (!hasNote) {
+      return InkWell(
+        onTap: () => _showEditNoteDialog(context),
+        borderRadius: BorderRadius.circular(10),
+        child: Container(
+          padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+          decoration: BoxDecoration(
+            color: Colors.white.withValues(alpha: 0.03),
+            borderRadius: BorderRadius.circular(10),
+            border: Border.all(color: Colors.white.withValues(alpha: 0.08)),
+          ),
+          child: Row(
+            mainAxisSize: MainAxisSize.min,
+            children: [
+              Icon(Icons.add_comment_outlined, size: 14, color: AppTheme.textMuted),
+              const SizedBox(width: 6),
+              Text(
+                isAr ? '+ إضافة ملاحظة للطلبية' : '+ Add Note',
+                style: TextStyle(
+                  fontSize: 11,
+                  color: AppTheme.textMuted,
+                  fontWeight: FontWeight.w500,
+                ),
+              ),
+            ],
+          ),
+        ),
+      );
     }
 
     return Container(
+      width: double.infinity,
       padding: const EdgeInsets.all(12),
       decoration: BoxDecoration(
-        color: statusColor.withValues(alpha: 0.06),
+        color: AppTheme.accentAmber.withValues(alpha: 0.07),
         borderRadius: BorderRadius.circular(12),
-        border: Border.all(color: statusColor.withValues(alpha: 0.25)),
+        border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.25)),
       ),
       child: Column(
         crossAxisAlignment: CrossAxisAlignment.start,
@@ -478,34 +570,30 @@ class _PaymentStatusBar extends StatelessWidget {
             children: [
               Row(
                 children: [
-                  Icon(Icons.payments_rounded, size: 14, color: statusColor),
+                  Icon(Icons.note_alt_rounded, size: 14, color: AppTheme.accentAmber),
                   const SizedBox(width: 6),
                   Text(
-                    isAr ? 'حالة الدفع:' : 'Payment:',
-                    style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                    isAr ? 'ملاحظة:' : 'Note:',
+                    style: TextStyle(
+                      fontSize: 11,
+                      fontWeight: FontWeight.bold,
+                      color: AppTheme.accentAmber,
+                    ),
                   ),
-                  const SizedBox(width: 6),
-                  Text(statusLabel,
-                      style: TextStyle(fontSize: 11, fontWeight: FontWeight.bold, color: statusColor)),
                 ],
               ),
-              GestureDetector(
-                onTap: () => showPaymentDialog(context, order),
-                child: Container(
-                  padding: const EdgeInsets.symmetric(horizontal: 8, vertical: 3),
-                  decoration: BoxDecoration(
-                    color: AppTheme.accentAmber.withValues(alpha: 0.15),
-                    borderRadius: BorderRadius.circular(8),
-                    border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.4)),
-                  ),
+              InkWell(
+                onTap: () => _showEditNoteDialog(context),
+                borderRadius: BorderRadius.circular(6),
+                child: Padding(
+                  padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
                   child: Row(
-                    mainAxisSize: MainAxisSize.min,
                     children: [
-                      Icon(Icons.edit_rounded, size: 11, color: AppTheme.accentAmber),
-                      const SizedBox(width: 4),
+                      Icon(Icons.edit_rounded, size: 12, color: AppTheme.textMuted),
+                      const SizedBox(width: 3),
                       Text(
-                        isAr ? 'تسجيل' : 'Pay',
-                        style: TextStyle(fontSize: 10, fontWeight: FontWeight.bold, color: AppTheme.accentAmber),
+                        isAr ? 'تعديل' : 'Edit',
+                        style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
                       ),
                     ],
                   ),
@@ -513,40 +601,15 @@ class _PaymentStatusBar extends StatelessWidget {
               ),
             ],
           ),
-          if (order.paymentStatus != 'unpaid') ...[
-            const SizedBox(height: 8),
-            Row(
-              mainAxisAlignment: MainAxisAlignment.spaceBetween,
-              children: [
-                Text(
-                  '${paid.toStringAsFixed(0)} / ${total.toStringAsFixed(0)} د.ج',
-                  style: TextStyle(fontSize: 10, color: AppTheme.textMuted),
-                ),
-                Text(
-                  balance > 0.5
-                      ? '${isAr ? "متبقي" : "Due"}: ${balance.toStringAsFixed(0)} د.ج'
-                      : balance < -0.5
-                          ? '${isAr ? "باقي للزبون" : "Change"}: ${balance.abs().toStringAsFixed(0)} د.ج'
-                          : '',
-                  style: TextStyle(
-                    fontSize: 10,
-                    fontWeight: FontWeight.bold,
-                    color: balance > 0.5 ? AppTheme.error : Colors.tealAccent,
-                  ),
-                ),
-              ],
+          const SizedBox(height: 6),
+          Text(
+            order.note!,
+            style: TextStyle(
+              fontSize: 12.5,
+              color: AppTheme.textPrimary,
+              height: 1.4,
             ),
-            const SizedBox(height: 6),
-            ClipRRect(
-              borderRadius: BorderRadius.circular(6),
-              child: LinearProgressIndicator(
-                value: progress,
-                minHeight: 5,
-                backgroundColor: AppTheme.borderSubtle,
-                valueColor: AlwaysStoppedAnimation<Color>(statusColor),
-              ),
-            ),
-          ],
+          ),
         ],
       ),
     );
@@ -1168,7 +1231,7 @@ class _FabricSection extends StatelessWidget {
 
         const SizedBox(height: 12),
 
-        // Per-fabric summary bar
+        // Per-fabric summary bar (Sleek, lightweight inline bar distinct from the order summary box)
         Builder(
           builder: (context) {
             final totalQuantity = fabric.sequence.fold(0.0, (sum, val) => sum + val);
@@ -1178,53 +1241,83 @@ class _FabricSection extends StatelessWidget {
                 ? totalQuantity.toInt().toString()
                 : totalQuantity.toStringAsFixed(1);
             final rollCount = fabric.sequence.length;
+            final unitStr = fabric.unit == 'kg' ? 'كغ' : (fabric.unit == 'yard' ? 'ياردة' : 'م');
+            final formattedUnitPrice = fabric.price > 0
+                ? NumberFormat('#,##0.##', 'en_US').format(fabric.price)
+                : '-';
 
-            return Container(
-              padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
-              decoration: BoxDecoration(
-                color: AppTheme.accentAmber.withValues(alpha: 0.08),
-                borderRadius: BorderRadius.circular(10),
-                border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.25)),
-              ),
-              child: Row(
-                mainAxisAlignment: MainAxisAlignment.spaceBetween,
-                children: [
-                  Row(
-                    children: [
-                      Icon(Icons.layers_rounded, size: 15, color: AppTheme.accentAmber),
-                      const SizedBox(width: 6),
-                      Text(
-                        '$rollCount أسطوانة',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.textPrimary,
-                        ),
-                      ),
-                      Text(
-                        '  •  ',
-                        style: TextStyle(fontSize: 12, color: Colors.grey.shade500),
-                      ),
-                      Text(
-                        '$formattedQty م',
-                        style: TextStyle(
-                          fontSize: 13,
-                          fontWeight: FontWeight.bold,
-                          color: AppTheme.accentAmberLight,
-                        ),
-                      ),
-                    ],
-                  ),
-                  if (fabric.price > 0)
+            return Padding(
+              padding: const EdgeInsets.only(top: 4),
+              child: Container(
+                padding: const EdgeInsets.symmetric(horizontal: 12, vertical: 8),
+                decoration: BoxDecoration(
+                  color: AppTheme.accentAmber.withValues(alpha: 0.05),
+                  borderRadius: BorderRadius.circular(10),
+                  border: Border.all(color: AppTheme.accentAmber.withValues(alpha: 0.18)),
+                ),
+                child: Row(
+                  children: [
+                    // عدد الأسطوانات وإجمالي الكمية
+                    Icon(Icons.layers_rounded, size: 14, color: AppTheme.accentAmber),
+                    const SizedBox(width: 6),
                     Text(
-                      '$formattedPrice د.ج',
+                      '$rollCount أسطوانات',
                       style: TextStyle(
-                        fontSize: 14,
-                        fontWeight: FontWeight.w900,
-                        color: AppTheme.accentAmber,
+                        fontSize: 12,
+                        fontWeight: FontWeight.w600,
+                        color: AppTheme.textPrimary,
                       ),
                     ),
-                ],
+                    Text(
+                      '  •  ',
+                      style: TextStyle(fontSize: 11, color: AppTheme.textMuted),
+                    ),
+                    Text(
+                      '$formattedQty $unitStr',
+                      style: TextStyle(
+                        fontSize: 12.5,
+                        fontWeight: FontWeight.bold,
+                        color: AppTheme.accentAmberLight,
+                      ),
+                    ),
+                    const Spacer(),
+
+                    // سعر القماش المعين (في شارة صغيرة أنيقة)
+                    if (fabric.price > 0) ...[
+                      Container(
+                        padding: const EdgeInsets.symmetric(horizontal: 6, vertical: 2),
+                        decoration: BoxDecoration(
+                          color: AppTheme.surfaceCard,
+                          borderRadius: BorderRadius.circular(6),
+                          border: Border.all(color: AppTheme.borderSubtle),
+                        ),
+                        child: Text(
+                          '$formattedUnitPrice د.ج',
+                          style: TextStyle(
+                            fontSize: 11,
+                            fontWeight: FontWeight.w600,
+                            color: AppTheme.textSecondary,
+                          ),
+                        ),
+                      ),
+                      const SizedBox(width: 8),
+                      // إجمالي سعر هذا القماش
+                      Text(
+                        '$formattedPrice د.ج',
+                        style: TextStyle(
+                          fontSize: 13.5,
+                          fontWeight: FontWeight.w900,
+                          color: AppTheme.accentAmber,
+                        ),
+                      ),
+                    ] else ...[
+                      Text(
+                        '-',
+                        style: TextStyle(fontSize: 13, color: AppTheme.textMuted),
+                      ),
+                    ],
+                  ],
+                ),
               ),
             );
           },

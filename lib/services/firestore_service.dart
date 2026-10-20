@@ -1,3 +1,4 @@
+import 'package:flutter/foundation.dart';
 import 'package:cloud_firestore/cloud_firestore.dart' hide Order;
 import '../models/order_model.dart';
 import '../models/user_model.dart';
@@ -120,6 +121,16 @@ class FirestoreService {
     };
     if (finalPrice != null) data['finalPrice'] = finalPrice;
     await _firestore.collection('orders').doc(orderId).update(data);
+  }
+
+  /// Update or add a written note on an existing order document.
+  Future<void> updateOrderNote({
+    required String orderId,
+    required String note,
+  }) async {
+    await _firestore.collection('orders').doc(orderId).update({
+      'note': note.trim().isEmpty ? null : note.trim(),
+    });
   }
 
   /// Stream orders that have payment status 'unpaid' or 'partial' for a given receiver.
@@ -955,10 +966,12 @@ class FirestoreService {
   }
 
   /// Publish a new app update (Super Admin only)
-  Future<void> publishAppUpdate(String version, String url) async {
+  Future<void> publishAppUpdate(String version, String url, {String? changelog}) async {
     await _firestore.collection('app_updates').doc('latest').set({
       'version': version.trim(),
       'url': url.trim(),
+      'downloadUrl': url.trim(),
+      'changelog': changelog?.trim() ?? '',
       'publishedAt': FieldValue.serverTimestamp(),
     });
   }
@@ -989,7 +1002,22 @@ class FirestoreService {
     });
   }
 
-  // ─── Free Registration & Shop Code System ───────────────────────
+  /// Ensure shop has a unique shopCode, if missing generate one and persist it
+  Future<String> ensureShopCode(String shopId, String shopName, {String? inviteCode}) async {
+    try {
+      if (inviteCode != null && inviteCode.trim().isNotEmpty) {
+        final code = inviteCode.trim();
+        await _firestore.collection('shops').doc(shopId).update({'shopCode': code});
+        return code;
+      }
+      final newCode = _generateShopCode(shopName);
+      await _firestore.collection('shops').doc(shopId).update({'shopCode': newCode});
+      return newCode;
+    } catch (e) {
+      debugPrint('ensureShopCode error: $e');
+      return '';
+    }
+  }
 
   /// Generate a unique 6-digit shop code
   String _generateShopCode(String shopName) {
@@ -1054,12 +1082,27 @@ class FirestoreService {
     String? password,
     String? photoBase64,
   }) async {
-    final cleanCode = shopCode.trim().toUpperCase();
-    final shopQuery = await _firestore
+    var cleanCode = shopCode.trim().toUpperCase();
+    const arabicDigits = ['٠', '١', '٢', '٣', '٤', '٥', '٦', '٧', '٨', '٩'];
+    const englishDigits = ['0', '1', '2', '3', '4', '5', '6', '7', '8', '9'];
+    for (int i = 0; i < 10; i++) {
+      cleanCode = cleanCode.replaceAll(arabicDigits[i], englishDigits[i]);
+    }
+
+    var shopQuery = await _firestore
         .collection('shops')
         .where('shopCode', isEqualTo: cleanCode)
         .limit(1)
         .get();
+
+    // Fallback: Also check inviteCode (for older shops created in previous versions)
+    if (shopQuery.docs.isEmpty) {
+      shopQuery = await _firestore
+          .collection('shops')
+          .where('inviteCode', isEqualTo: cleanCode)
+          .limit(1)
+          .get();
+    }
 
     if (shopQuery.docs.isEmpty) {
       throw Exception('كود المحل غير صحيح أو غير موجود');

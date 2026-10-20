@@ -31,6 +31,7 @@ class NewOrderScreen extends StatefulWidget {
 
 class _NewOrderScreenState extends State<NewOrderScreen> {
   final TextEditingController _customerNameController = TextEditingController();
+  final TextEditingController _noteController = TextEditingController();
   bool _isCustomerNameErrorFlashed = false;
 
   Future<void> _flashCustomerNameField() async {
@@ -89,6 +90,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     _quickAudioRecorder.dispose();
     _quickAudioPlayer?.dispose();
     _customerNameController.dispose();
+    _noteController.dispose();
     super.dispose();
   }
 
@@ -353,9 +355,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           senderName: authProvider.displayName,
           customerName: _customerNameController.text.trim(),
           shopId: authProvider.appUser?.shopId ?? '',
+          note: _noteController.text.trim(),
           isDraft: false,
         );
         _customerNameController.clear();
+        _noteController.clear();
         _showSnackBar(
           isAr ? 'تم حفظ الطلبية محلياً بنجاح (دون اتصال) ✓' : 'Order saved locally successfully (Offline) ✓',
           isError: false,
@@ -380,12 +384,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       receiverIds: selectedUsers.map((u) => u.uid).toList(),
       receiverNames: selectedUsers.map((u) => u.displayName).toList(),
       customerName: _customerNameController.text.trim(),
+      note: _noteController.text.trim(),
       shopId: authProvider.appUser?.shopId ?? '',
     );
 
     if (mounted) {
       if (success) {
         _customerNameController.clear();
+        _noteController.clear();
         final names = selectedUsers.map((u) => u.displayName).join(', ');
         _showSnackBar(
           '${context.tr('order_sent_to')} $names ✓',
@@ -444,9 +450,11 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
           senderName: authProvider.displayName,
           customerName: _customerNameController.text.trim(),
           shopId: authProvider.appUser?.shopId ?? '',
+          note: _noteController.text.trim(),
           isDraft: true,
         );
         _customerNameController.clear();
+        _noteController.clear();
         _showSnackBar(
           isAr ? 'تم حفظ المسودة محلياً بنجاح (دون اتصال) ✓' : 'Draft saved locally successfully (Offline) ✓',
           isError: false,
@@ -473,6 +481,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       receiverIds: [selectedUser.uid],
       receiverNames: [selectedUser.displayName],
       customerName: _customerNameController.text.trim(),
+      note: _noteController.text.trim(),
       shopId: authProvider.appUser?.shopId ?? '',
       isDraft: true,
     );
@@ -480,6 +489,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     if (mounted) {
       if (success) {
         _customerNameController.clear();
+        _noteController.clear();
         final isAr = context.tr('tab_orders') == 'الطلبيات';
         _showSnackBar(
           isAr 
@@ -501,8 +511,9 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
     final authProvider = Provider.of<app_auth.AuthProvider>(context, listen: false);
     final offlineDrafts = orderProvider.offlineOrders.where((o) => o.isDraft).toList();
     final customerName = _customerNameController.text.trim();
+    final note = _noteController.text.trim();
     final hasFabrics = orderProvider.fabricEntries.any((f) => f.fabricType.isNotEmpty || f.sequence.isNotEmpty);
-    final hasEditorData = customerName.isNotEmpty || hasFabrics;
+    final hasEditorData = customerName.isNotEmpty || note.isNotEmpty || hasFabrics;
 
     // Case 1: Editor is empty and saved drafts exist -> RESTORE DRAFT IMMEDIATELY!
     if (!hasEditorData && offlineDrafts.isNotEmpty) {
@@ -510,6 +521,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
         final draftToRestore = offlineDrafts.first;
         orderProvider.loadOrder(draftToRestore);
         _customerNameController.text = draftToRestore.customerName ?? '';
+        _noteController.text = draftToRestore.note ?? '';
         await orderProvider.removeOfflineOrder(draftToRestore.id);
         if (mounted) {
           _showSnackBar(isAr ? 'تم استرجاع المسودة للتحرير بنجاح ✓' : 'Draft restored for editing ✓', isError: false);
@@ -527,10 +539,12 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
         senderId: authProvider.user?.uid ?? 'local_user',
         senderName: authProvider.displayName,
         customerName: customerName.isEmpty ? (isAr ? 'مسودة بدون اسم' : 'Unnamed Draft') : customerName,
+        note: note,
         shopId: authProvider.appUser?.shopId ?? '',
         isDraft: true,
       );
       _customerNameController.clear();
+      _noteController.clear();
       if (mounted) {
         _showSnackBar(
           isAr
@@ -601,6 +615,7 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                         Navigator.pop(ctx);
                         orderProvider.loadOrder(d);
                         _customerNameController.text = d.customerName ?? '';
+                        _noteController.text = d.note ?? '';
                         await orderProvider.removeOfflineOrder(d.id);
                         if (mounted) {
                           _showSnackBar(isAr ? 'تم استرجاع المسودة للتحرير بنجاح ✓' : 'Draft restored for editing ✓', isError: false);
@@ -648,6 +663,14 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
       WidgetsBinding.instance.addPostFrameCallback((_) {
         if (mounted && orderProvider.draftCustomerName != _customerNameController.text) {
           _customerNameController.text = orderProvider.draftCustomerName;
+        }
+      });
+    }
+
+    if (orderProvider.draftNote != _noteController.text) {
+      WidgetsBinding.instance.addPostFrameCallback((_) {
+        if (mounted && orderProvider.draftNote != _noteController.text) {
+          _noteController.text = orderProvider.draftNote;
         }
       });
     }
@@ -758,6 +781,25 @@ class _NewOrderScreenState extends State<NewOrderScreen> {
                       const SizedBox(width: 12),
                       const VoiceNoteRecorder(),
                     ],
+                  ),
+                  const SizedBox(height: 10),
+                  TextField(
+                    controller: _noteController,
+                    maxLines: 2,
+                    minLines: 1,
+                    onChanged: (val) {
+                      orderProvider.draftNote = val;
+                    },
+                    style: const TextStyle(fontSize: 13),
+                    decoration: InputDecoration(
+                      labelText: isAr ? 'ملاحظة حول الطلبية (اختياري)' : 'Order Note (Optional)',
+                      hintText: isAr ? 'اكتب أي ملاحظة أو توجيهات...' : 'Write any instructions or note...',
+                      prefixIcon: const Icon(Icons.note_alt_outlined, size: 20),
+                      contentPadding: const EdgeInsets.symmetric(
+                        horizontal: 16,
+                        vertical: 12,
+                      ),
+                    ),
                   ),
                   const SizedBox(height: 16),
                   _buildOrderSummaryCard(context, orderProvider),

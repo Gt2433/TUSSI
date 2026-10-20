@@ -9,7 +9,6 @@ import '../widgets/order_card.dart';
 import '../providers/order_provider.dart';
 import '../utils/order_share_helper.dart';
 import 'home_screen.dart';
-import 'payments_screen.dart';
 
 /// Screen showing pending orders assigned to (Inbox) or sent by (Sent) the current user.
 /// Supports real-time updates, tab switching, completions, and recall/editing.
@@ -69,7 +68,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
     }
 
     return DefaultTabController(
-      length: 3,
+      length: 2,
       child: Column(
         children: [
           // ─── Search & QR Scanner Header ────────────────────────
@@ -125,16 +124,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 tabs: [
                   Tab(text: isAr ? 'الواردة' : 'Received'),
                   Tab(text: isAr ? 'المرسلة' : 'Sent'),
-                  Tab(
-                    child: Row(
-                      mainAxisAlignment: MainAxisAlignment.center,
-                      children: [
-                        const Icon(Icons.account_balance_wallet_rounded, size: 14),
-                        const SizedBox(width: 4),
-                        Text(isAr ? 'الذمم' : 'Debts'),
-                      ],
-                    ),
-                  ),
                 ],
               ),
             ),
@@ -148,8 +137,6 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 _buildIncomingTab(uid),
                 // 2. Outgoing Tab (Sent)
                 _buildSentTab(uid),
-                // 3. Debts Tab (الذمم)
-                const PaymentsScreen(),
               ],
             ),
           ),
@@ -294,6 +281,7 @@ class _OrdersScreenState extends State<OrdersScreen> {
                 showDoneButton: true,
                 onDone: () => _confirmDone(context, order),
                 onResume: () => _resumeOrder(context, order),
+                onDelete: () => _deleteIncomingOrder(context, order),
               ),
             );
           },
@@ -432,6 +420,72 @@ class _OrdersScreenState extends State<OrdersScreen> {
 
   void _confirmDone(BuildContext context, Order order) {
     _markDone(order);
+  }
+
+  void _deleteIncomingOrder(BuildContext context, Order order) {
+    final isAr = context.tr('tab_orders') == 'الطلبيات';
+    showDialog(
+      context: context,
+      builder: (ctx) => AlertDialog(
+        title: Row(
+          children: [
+            Icon(Icons.delete_forever_rounded, color: AppTheme.error, size: 22),
+            const SizedBox(width: 8),
+            Text(isAr ? 'حذف الطلبية' : 'Delete Order'),
+          ],
+        ),
+        content: Text(
+          isAr
+              ? 'هل أنت متأكد من حذف هذه الطلبية نهائياً من صندوق الطلبيات؟'
+              : 'Are you sure you want to delete this order from the orders box?',
+        ),
+        actions: [
+          TextButton(
+            onPressed: () => Navigator.of(ctx).pop(),
+            child: Text(isAr ? 'إلغاء' : 'Cancel'),
+          ),
+          ElevatedButton(
+            onPressed: () async {
+              Navigator.of(ctx).pop();
+              try {
+                await _firestoreService.deleteOrderGroup(order);
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Row(
+                        children: [
+                          Icon(Icons.check_circle_rounded, color: AppTheme.success, size: 20),
+                          const SizedBox(width: 10),
+                          Text(isAr ? 'تم حذف الطلبية بنجاح ✓' : 'Order deleted successfully ✓'),
+                        ],
+                      ),
+                      backgroundColor: AppTheme.successSurface,
+                      behavior: SnackBarBehavior.floating,
+                      shape: RoundedRectangleBorder(borderRadius: BorderRadius.circular(12)),
+                      margin: const EdgeInsets.all(16),
+                    ),
+                  );
+                }
+              } catch (e) {
+                if (context.mounted) {
+                  ScaffoldMessenger.of(context).showSnackBar(
+                    SnackBar(
+                      content: Text('Error: ${e.toString()}'),
+                      backgroundColor: AppTheme.errorSurface,
+                    ),
+                  );
+                }
+              }
+            },
+            style: ElevatedButton.styleFrom(
+              backgroundColor: AppTheme.error,
+              foregroundColor: Colors.white,
+            ),
+            child: Text(isAr ? 'حذف' : 'Delete'),
+          ),
+        ],
+      ),
+    );
   }
 
   void _resumeOrder(BuildContext context, Order order) {

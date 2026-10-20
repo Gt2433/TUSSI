@@ -19,6 +19,7 @@ class OrderProvider extends ChangeNotifier {
   bool _isSending = false;
   String? _error;
   String _draftCustomerName = '';
+  String _draftNote = '';
   String? _draftVoiceNoteBase64;
   
   bool _isOffline = false;
@@ -101,12 +102,13 @@ class OrderProvider extends ChangeNotifier {
   Future<void> _saveActiveDraftToPrefs() async {
     try {
       final prefs = await SharedPreferences.getInstance();
-      if (_fabricEntries.isEmpty && _draftCustomerName.isEmpty && (_draftVoiceNoteBase64 == null || _draftVoiceNoteBase64!.isEmpty)) {
+      if (_fabricEntries.isEmpty && _draftCustomerName.isEmpty && _draftNote.isEmpty && (_draftVoiceNoteBase64 == null || _draftVoiceNoteBase64!.isEmpty)) {
         await prefs.remove('active_order_draft_autosave');
         return;
       }
       final data = {
         'customerName': _draftCustomerName,
+        'note': _draftNote,
         'voiceNoteBase64': _draftVoiceNoteBase64,
         'fabricEntries': _fabricEntries.map((e) => e.toMap()).toList(),
       };
@@ -123,6 +125,7 @@ class OrderProvider extends ChangeNotifier {
       if (jsonStr != null && jsonStr.isNotEmpty) {
         final Map<String, dynamic> data = jsonDecode(jsonStr);
         _draftCustomerName = data['customerName'] as String? ?? '';
+        _draftNote = data['note'] as String? ?? '';
         _draftVoiceNoteBase64 = data['voiceNoteBase64'] as String?;
         final rawEntries = data['fabricEntries'] as List<dynamic>? ?? [];
         if (rawEntries.isNotEmpty) {
@@ -138,6 +141,7 @@ class OrderProvider extends ChangeNotifier {
   Future<void> clearActiveDraft() async {
     _fabricEntries = [FabricEntry(fabricType: '', price: 0.0)];
     _draftCustomerName = '';
+    _draftNote = '';
     _draftVoiceNoteBase64 = null;
     notifyListeners();
     try {
@@ -151,6 +155,7 @@ class OrderProvider extends ChangeNotifier {
     required String senderName,
     required String customerName,
     required String shopId,
+    String? note,
     bool isDraft = false,
   }) async {
     final baseId = DateTime.now().millisecondsSinceEpoch.toString();
@@ -167,6 +172,7 @@ class OrderProvider extends ChangeNotifier {
       broadcastGroupId: baseId,
       isDraft: isDraft,
       voiceNoteBase64: _draftVoiceNoteBase64,
+      note: note ?? (_draftNote.isNotEmpty ? _draftNote : null),
       shopId: shopId,
     );
 
@@ -245,6 +251,7 @@ class OrderProvider extends ChangeNotifier {
   String? get error => _error;
   bool get hasEntries => _fabricEntries.isNotEmpty;
   String get draftCustomerName => _draftCustomerName;
+  String get draftNote => _draftNote;
   String? get draftVoiceNoteBase64 => _draftVoiceNoteBase64;
 
   void setVoiceNoteBase64(String? base64) {
@@ -261,10 +268,19 @@ class OrderProvider extends ChangeNotifier {
     }
   }
 
+  set draftNote(String val) {
+    if (_draftNote != val) {
+      _draftNote = val;
+      notifyListeners();
+      _saveActiveDraftToPrefs();
+    }
+  }
+
   // ─── Initialize with one empty entry ──────────────────────────
   void initNewOrder() {
     _fabricEntries = [FabricEntry(fabricType: '', price: 0.0)];
     _draftCustomerName = '';
+    _draftNote = '';
     _draftVoiceNoteBase64 = null;
     _error = null;
     notifyListeners();
@@ -405,6 +421,7 @@ class OrderProvider extends ChangeNotifier {
     required List<String> receiverNames,
     required String shopId,
     String? customerName,
+    String? note,
     bool isDraft = false,
     bool isQuickOrder = false,
   }) async {
@@ -438,6 +455,7 @@ class OrderProvider extends ChangeNotifier {
           broadcastGroupId: baseId,
           isDraft: isDraft,
           voiceNoteBase64: _draftVoiceNoteBase64,
+          note: note ?? (_draftNote.isNotEmpty ? _draftNote : null),
           shopId: shopId,
         );
         await _firestoreService.createOrder(order);
@@ -481,6 +499,7 @@ class OrderProvider extends ChangeNotifier {
   void reset() {
     _fabricEntries = [];
     _draftCustomerName = '';
+    _draftNote = '';
     _draftVoiceNoteBase64 = null;
     _isSending = false;
     _error = null;
@@ -499,6 +518,7 @@ class OrderProvider extends ChangeNotifier {
       );
     }).toList();
     _draftCustomerName = order.customerName ?? '';
+    _draftNote = order.note ?? '';
     _draftVoiceNoteBase64 = order.voiceNoteBase64;
     _error = null;
     notifyListeners();

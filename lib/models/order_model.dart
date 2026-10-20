@@ -159,6 +159,7 @@ class Order {
   final String? broadcastGroupId;
   final bool isDraft;
   final String? voiceNoteBase64;
+  final String? note;
   final String? shopId;
 
   // ─── Payment Fields ────────────────────────────────────────────
@@ -186,6 +187,7 @@ class Order {
     this.broadcastGroupId,
     this.isDraft = false,
     this.voiceNoteBase64,
+    this.note,
     this.shopId,
     this.finalPrice,
     this.paidAmount,
@@ -227,6 +229,7 @@ class Order {
       broadcastGroupId: map['broadcastGroupId'],
       isDraft: map['isDraft'] ?? false,
       voiceNoteBase64: map['voiceNoteBase64'],
+      note: map['note'],
       shopId: map['shopId'],
       finalPrice: (map['finalPrice'] as num?)?.toDouble(),
       paidAmount: (map['paidAmount'] as num?)?.toDouble(),
@@ -252,6 +255,7 @@ class Order {
       if (broadcastGroupId != null) 'broadcastGroupId': broadcastGroupId,
       'isDraft': isDraft,
       if (voiceNoteBase64 != null) 'voiceNoteBase64': voiceNoteBase64,
+      if (note != null) 'note': note,
       if (shopId != null) 'shopId': shopId,
       if (finalPrice != null) 'finalPrice': finalPrice,
       if (paidAmount != null) 'paidAmount': paidAmount,
@@ -276,6 +280,7 @@ class Order {
       'broadcastGroupId': broadcastGroupId,
       'isDraft': isDraft,
       'voiceNoteBase64': voiceNoteBase64,
+      'note': note,
       'shopId': shopId,
       'finalPrice': finalPrice,
       'paidAmount': paidAmount,
@@ -310,6 +315,7 @@ class Order {
       broadcastGroupId: map['broadcastGroupId'],
       isDraft: map['isDraft'] ?? false,
       voiceNoteBase64: map['voiceNoteBase64'],
+      note: map['note'],
       shopId: map['shopId'],
       finalPrice: (map['finalPrice'] as num?)?.toDouble(),
       paidAmount: (map['paidAmount'] as num?)?.toDouble(),

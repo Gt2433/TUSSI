@@ -1047,6 +1047,69 @@ class LanguageProvider extends ChangeNotifier {
       AppLanguage.es: 'Contraseña actualizada correctamente',
     
       AppLanguage.zh: '密码更新成功',},
+    'search_customer_or_fabric': {
+      AppLanguage.fr: 'Rechercher par client ou tissu...',
+      AppLanguage.en: 'Search by customer or fabric...',
+      AppLanguage.ar: 'بحث باسم الزبون أو اسم القماش...',
+      AppLanguage.es: 'Buscar por cliente o tela...',
+      AppLanguage.zh: '按客户或面料搜索...',
+    },
+    'date_from': {
+      AppLanguage.fr: 'Du',
+      AppLanguage.en: 'From',
+      AppLanguage.ar: 'من تاريخ',
+      AppLanguage.es: 'Desde',
+      AppLanguage.zh: '从',
+    },
+    'date_to': {
+      AppLanguage.fr: 'Au',
+      AppLanguage.en: 'To',
+      AppLanguage.ar: 'إلى تاريخ',
+      AppLanguage.es: 'Hasta',
+      AppLanguage.zh: '至',
+    },
+    'reset_filter': {
+      AppLanguage.fr: 'Réinitialiser',
+      AppLanguage.en: 'Reset',
+      AppLanguage.ar: 'إعادة تعيين',
+      AppLanguage.es: 'Restablecer',
+      AppLanguage.zh: '重置',
+    },
+    'no_matching_results': {
+      AppLanguage.fr: 'Aucun résultat correspondant',
+      AppLanguage.en: 'No matching results found',
+      AppLanguage.ar: 'لا توجد نتائج مطابقة للبحث أو الفترة المحددة',
+      AppLanguage.es: 'No se encontraron resultados coincidentes',
+      AppLanguage.zh: '未找到匹配结果',
+    },
+    'matching_orders_count': {
+      AppLanguage.fr: 'commande(s) trouvée(s)',
+      AppLanguage.en: 'order(s) found',
+      AppLanguage.ar: 'طلبية مطابقة',
+      AppLanguage.es: 'pedido(s) encontrado(s)',
+      AppLanguage.zh: '找到的订单',
+    },
+    'clear_all_history': {
+      AppLanguage.fr: 'Effacer l\'historique',
+      AppLanguage.en: 'Clear History',
+      AppLanguage.ar: 'مسح السجل',
+      AppLanguage.es: 'Borrar historial',
+      AppLanguage.zh: '清空历史',
+    },
+    'clear_history_confirm': {
+      AppLanguage.fr: 'Êtes-vous sûr de vouloir effacer tout l\'historique ? Cette action est irréversible.',
+      AppLanguage.en: 'Are you sure you want to permanently clear all history? This cannot be undone.',
+      AppLanguage.ar: 'هل أنت متأكد من مسح جميع الطلبيات المكتملة نهائياً من السجل؟ لا يمكن التراجع عن هذا الإجراء.',
+      AppLanguage.es: '¿Estás seguro de que quieres borrar todo el historial? No se puede deshacer.',
+      AppLanguage.zh: '您确定要永久清除所有历史记录吗？此操作无法撤消。',
+    },
+    'history_cleared': {
+      AppLanguage.fr: 'Historique effacé avec succès ✓',
+      AppLanguage.en: 'History cleared successfully ✓',
+      AppLanguage.ar: 'تم مسح السجل بنجاح ✓',
+      AppLanguage.es: 'Historial borrado con éxito ✓',
+      AppLanguage.zh: '历史记录已成功清除 ✓',
+    },
   };
 }
 
